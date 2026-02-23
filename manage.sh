@@ -36,10 +36,12 @@ _sync() {
 case "$CMD" in
 
   deploy)
-    # Полный деплой: sync → rebuild → restart
+    # Полный деплой: sync → rebuild → restart → kiosk
     _sync
     echo "→ Building and restarting containers ..."
     _ssh "cd ${PI_PATH} && docker compose up -d --build"
+    echo "→ Restarting kiosk ..."
+    _ssh "pkill -x chromium || true; sleep 2; WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 bash ${PI_PATH}/start-kiosk.sh >>/tmp/kiosk.log 2>&1 &"
     echo "✓ Deploy complete — http://${PI_HOST}:${FRONTEND_PORT:-3000}"
     ;;
 
