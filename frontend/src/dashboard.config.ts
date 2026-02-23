@@ -35,5 +35,8 @@ export const DASHBOARD_CONFIG = {
       ],
     },
   ] as PageConfig[],
-  rotate: { enabled: false, intervalSeconds: 20 },
+  rotate: {
+    enabled: import.meta.env.VITE_ROTATE_ENABLED === 'true',
+    intervalSeconds: Number(import.meta.env.VITE_ROTATE_INTERVAL ?? 20),
+  },
 }

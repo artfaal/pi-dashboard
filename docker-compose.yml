@@ -29,6 +29,19 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_ROTATE_ENABLED:   ${VITE_ROTATE_ENABLED:-false}
+        VITE_ROTATE_INTERVAL:  ${VITE_ROTATE_INTERVAL:-20}
+        VITE_CO2_OK:           ${VITE_CO2_OK:-800}
+        VITE_CO2_WARN:         ${VITE_CO2_WARN:-1000}
+        VITE_CO2_BAD:          ${VITE_CO2_BAD:-1500}
+        VITE_CO2_MAX:          ${VITE_CO2_MAX:-2000}
+        VITE_CO2_HISTORY:      ${VITE_CO2_HISTORY:-30}
+        VITE_TEMP_COLD:        ${VITE_TEMP_COLD:-18}
+        VITE_TEMP_WARM:        ${VITE_TEMP_WARM:-24}
+        VITE_TEMP_SCALE_MIN:   ${VITE_TEMP_SCALE_MIN:-10}
+        VITE_TEMP_SCALE_MAX:   ${VITE_TEMP_SCALE_MAX:-40}
+        VITE_PLANTS_PER_PAGE:  ${VITE_PLANTS_PER_PAGE:-3}
     image: pi-dashboard-frontend:latest
     container_name: pi-dashboard-frontend
     restart: unless-stopped

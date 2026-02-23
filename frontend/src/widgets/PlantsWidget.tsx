@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import type { PlantsData, PlantData, WidgetProps } from '../types'
 
-const PER_PAGE = 3
+const PER_PAGE = Number(import.meta.env.VITE_PLANTS_PER_PAGE ?? 3)
 
 function HumidityBar({ value, min, max }: { value: number; min: number; max: number }) {
   const clamp = (v: number) => Math.max(0, Math.min(100, v))

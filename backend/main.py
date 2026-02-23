@@ -173,14 +173,18 @@ async def snapshot():
     return latest
 
 
+_IMAGE_BASE_URL = os.environ.get("PLANTS_IMAGE_BASE_URL", "https://img.artfaal.ru/plants").rstrip("/")
+_IMAGE_TIMEOUT  = int(os.environ.get("PLANTS_IMAGE_TIMEOUT", "10"))
+
+
 @app.get("/api/plants/image/{name}")
 async def plants_image(name: str):
     """Proxy plant images through SOCKS5 so the browser doesn't need direct access."""
     module = module_instances.get("plants")
     proxy = module.proxy if module else None
-    url = f"https://img.artfaal.ru/plants/{urllib.parse.quote(name)}.png"
+    url = f"{_IMAGE_BASE_URL}/{urllib.parse.quote(name)}.png"
     try:
-        async with httpx.AsyncClient(timeout=10, proxy=proxy) as client:
+        async with httpx.AsyncClient(timeout=_IMAGE_TIMEOUT, proxy=proxy) as client:
             r = await client.get(url)
             r.raise_for_status()
         content_type = r.headers.get("content-type", "image/png")

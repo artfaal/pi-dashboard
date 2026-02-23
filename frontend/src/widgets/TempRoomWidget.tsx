@@ -1,8 +1,10 @@
 import { useRef } from 'react'
 import type { CO2Data, WidgetProps } from '../types'
 
-const COLD = 18
-const WARM = 24
+const COLD      = Number(import.meta.env.VITE_TEMP_COLD      ?? 18)
+const WARM      = Number(import.meta.env.VITE_TEMP_WARM      ?? 24)
+const SCALE_MIN = Number(import.meta.env.VITE_TEMP_SCALE_MIN ?? 10)
+const SCALE_MAX = Number(import.meta.env.VITE_TEMP_SCALE_MAX ?? 40)
 
 function WidgetLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -40,7 +42,8 @@ export function TempRoomWidget({ data, error }: WidgetProps) {
     temp > WARM ? 'Жарковато' :
                   'Комфортно'
 
-  const pct = Math.min(Math.max((temp - 10) / 30, 0), 1) * 100
+  const range = SCALE_MAX - SCALE_MIN
+  const pct = Math.min(Math.max((temp - SCALE_MIN) / range, 0), 1) * 100
 
   return (
     <div className="flex flex-col h-full gap-3 animate-fadeIn">
@@ -79,8 +82,8 @@ export function TempRoomWidget({ data, error }: WidgetProps) {
           <div
             className="absolute top-0 h-full rounded-full opacity-20"
             style={{
-              left: `${((COLD - 10) / 30) * 100}%`,
-              width: `${((WARM - COLD) / 30) * 100}%`,
+              left: `${((COLD - SCALE_MIN) / range) * 100}%`,
+              width: `${((WARM - COLD) / range) * 100}%`,
               backgroundColor: '#4ade80',
             }}
           />
@@ -95,9 +98,9 @@ export function TempRoomWidget({ data, error }: WidgetProps) {
           />
         </div>
         <div className="flex justify-between text-[10px] text-slate-600">
-          <span>10°</span>
+          <span>{SCALE_MIN}°</span>
           <span className="text-slate-700">{COLD}°–{WARM}° комфорт</span>
-          <span>40°</span>
+          <span>{SCALE_MAX}°</span>
         </div>
       </div>
     </div>

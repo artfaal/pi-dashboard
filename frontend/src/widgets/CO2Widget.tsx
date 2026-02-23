@@ -3,6 +3,12 @@ import type { CO2Data, WidgetProps } from '../types'
 
 // ── CO2 level thresholds ───────────────────────────────────────────────────────
 
+const CO2_OK      = Number(import.meta.env.VITE_CO2_OK      ?? 800)
+const CO2_WARN    = Number(import.meta.env.VITE_CO2_WARN    ?? 1000)
+const CO2_BAD     = Number(import.meta.env.VITE_CO2_BAD     ?? 1500)
+const CO2_MAX     = Number(import.meta.env.VITE_CO2_MAX     ?? 2000)
+const CO2_HISTORY = Number(import.meta.env.VITE_CO2_HISTORY ?? 30)
+
 interface Level {
   max: number
   label: string
@@ -12,9 +18,9 @@ interface Level {
 
 const LEVELS: Level[] = [
   { max: 600,      label: 'Отлично',  color: '#16a34a', textColor: '#4ade80' },
-  { max: 800,      label: 'Хорошо',   color: '#22c55e', textColor: '#86efac' },
-  { max: 1000,     label: 'Норма',    color: '#ca8a04', textColor: '#fde047' },
-  { max: 1500,     label: 'Высокий',  color: '#ea580c', textColor: '#fb923c' },
+  { max: CO2_OK,   label: 'Хорошо',   color: '#22c55e', textColor: '#86efac' },
+  { max: CO2_WARN, label: 'Норма',    color: '#ca8a04', textColor: '#fde047' },
+  { max: CO2_BAD,  label: 'Высокий',  color: '#ea580c', textColor: '#fb923c' },
   { max: Infinity, label: 'Опасно',   color: '#dc2626', textColor: '#f87171' },
 ]
 
@@ -35,7 +41,7 @@ function CircularGauge({ ppm, level }: GaugeProps) {
   const r = 54
   const strokeW = 9
   const circumference = 2 * Math.PI * r
-  const MAX_PPM = 2000
+  const MAX_PPM = CO2_MAX
   const progress = Math.min(ppm / MAX_PPM, 1)
   const dash = circumference * progress
 
@@ -159,7 +165,7 @@ export function CO2Widget({ data, error }: WidgetProps) {
 
   useEffect(() => {
     if (co2Data?.ppm != null)
-      setHistory((prev) => [...prev.slice(-29), co2Data.ppm])
+      setHistory((prev) => [...prev.slice(-(CO2_HISTORY - 1)), co2Data.ppm])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [co2Data?.ppm])
 
