@@ -80,8 +80,13 @@ export default function App() {
   const page    = pages[pageIdx]
   const colCount = Math.min(page.slots.length, 3)
 
+  const nextPage = () => goToPage((pageIdx + 1) % pages.length)
+
   return (
-    <div className="w-full h-full flex flex-col bg-[#080c10] select-none">
+    <div
+      className="w-full h-full flex flex-col bg-[#080c10] select-none"
+      onClick={pages.length > 1 ? nextPage : undefined}
+    >
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <header className="flex items-center justify-between px-5 py-2.5 border-b border-white/[0.05]">
@@ -117,33 +122,6 @@ export default function App() {
           )
         })}
       </main>
-
-      {/* ── Page navigation ─────────────────────────────────────────────── */}
-      {pages.length > 1 && (
-        <nav className="flex flex-col items-center gap-1 py-2 border-t border-white/[0.05]">
-          <div className="flex items-center">
-            {pages.map((p, i) => (
-              <button
-                key={p.id}
-                onClick={() => goToPage(i)}
-                aria-label={p.label}
-                style={{ minWidth: 44, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <div
-                  style={{
-                    height: 8,
-                    width: i === pageIdx ? 24 : 8,
-                    borderRadius: 4,
-                    backgroundColor: i === pageIdx ? '#6366f1' : '#334155',
-                    transition: 'all 0.3s ease',
-                  }}
-                />
-              </button>
-            ))}
-          </div>
-          <span className="text-[10px] text-slate-600">{page.label}</span>
-        </nav>
-      )}
 
     </div>
   )

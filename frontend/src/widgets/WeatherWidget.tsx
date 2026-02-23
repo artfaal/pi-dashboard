@@ -9,15 +9,6 @@ function WidgetLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-1">
-      <span className="text-[10px] text-slate-600">{label}</span>
-      <span className="text-xs text-slate-300 font-mono tabular-nums">{value}</span>
-    </div>
-  )
-}
-
 function fmtTemp(t: number): string {
   return t > 0 ? `+${t}` : String(t)
 }
@@ -54,54 +45,57 @@ export function WeatherWidget({ data, error }: WidgetProps) {
   return (
     <div className="flex flex-col h-full gap-2 animate-fadeIn">
 
-      {/* Row 1: label + location / description + icon */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-0.5">
+      {/* Header: label + location + icon */}
+      <div className="flex items-start justify-between gap-1">
+        <div className="min-w-0">
           <WidgetLabel>Погода</WidgetLabel>
-          <span className="text-slate-400 text-xs">{displayed.location}</span>
-          <span className="text-[11px] text-slate-500 leading-tight">{displayed.description}</span>
+          <div className="text-slate-400 text-xs truncate">{displayed.location}</div>
+          <div className="text-slate-500 text-[11px] truncate leading-tight">{displayed.description}</div>
         </div>
-        <span
-          className="text-slate-300 shrink-0"
-          style={{ fontSize: 36, lineHeight: 1 }}
-          aria-hidden
-        >
+        <span className="text-slate-300 shrink-0 leading-none" style={{ fontSize: 30 }} aria-hidden>
           {icon}
         </span>
       </div>
 
-      {/* Row 2: big temp + stats */}
-      <div className="flex items-center gap-3 flex-1">
-        {/* Big temperature */}
-        <div className="flex items-start leading-none shrink-0">
-          <span
-            className="font-mono font-bold text-slate-100"
-            style={{ fontSize: 54, lineHeight: 1 }}
-          >
-            {fmtTemp(displayed.temp)}
-          </span>
-          <span className="text-slate-500 text-xl mt-1.5 ml-0.5">°</span>
-        </div>
-
-        {/* Stats */}
-        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-          <StatRow label="Ощущается" value={`${fmtTemp(displayed.feels_like)}°`} />
-          <StatRow label="Влажность"  value={`${displayed.humidity}%`} />
-          <StatRow label="Ветер"      value={`${displayed.wind_speed} км/ч ${displayed.wind_dir}`} />
-          {displayed.precipitation > 0 && (
-            <StatRow label="Осадки" value={`${displayed.precipitation} мм`} />
-          )}
-        </div>
+      {/* Big temp + feels like on same line */}
+      <div className="flex items-baseline gap-2">
+        <span
+          className="font-mono font-bold text-slate-100 leading-none"
+          style={{ fontSize: 50 }}
+        >
+          {fmtTemp(displayed.temp)}°
+        </span>
+        <span className="text-slate-500 text-xs whitespace-nowrap">
+          ощущ. {fmtTemp(displayed.feels_like)}°
+        </span>
       </div>
 
-      {/* Row 3: day range */}
-      <div className="flex items-center justify-center gap-2 text-sm border-t border-white/[0.05] pt-2">
+      {/* Stats: 2×2 grid */}
+      <div className="grid grid-cols-2 gap-x-2 gap-y-1 flex-1 content-start">
+        <StatCell label="Влажность" value={`${displayed.humidity}%`} />
+        <StatCell label="Ветер" value={`${displayed.wind_speed} ${displayed.wind_dir}`} />
+        {displayed.precipitation > 0 && (
+          <StatCell label="Осадки" value={`${displayed.precipitation} мм`} />
+        )}
+      </div>
+
+      {/* Day range */}
+      <div className="flex items-center gap-1.5 border-t border-white/[0.05] pt-1.5">
         <span className="text-blue-400 font-mono text-sm">{fmtTemp(displayed.temp_min)}°</span>
-        <span className="text-slate-600">·</span>
+        <span className="text-slate-600 text-xs">·</span>
         <span className="text-orange-400 font-mono text-sm">{fmtTemp(displayed.temp_max)}°</span>
-        <span className="text-slate-600 text-[10px]">диапазон дня</span>
+        <span className="text-slate-600 text-[10px] ml-1">диапазон дня</span>
       </div>
 
+    </div>
+  )
+}
+
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[9px] text-slate-600 uppercase tracking-wide">{label}</span>
+      <span className="text-xs text-slate-300 font-mono leading-tight">{value}</span>
     </div>
   )
 }
