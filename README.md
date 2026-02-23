@@ -179,8 +179,15 @@ export const DASHBOARD_CONFIG = {
 }
 ```
 
-**Навигация:** тап в любом месте экрана → следующая страница (циклически).
+**Навигация (тачскрин):**
+- **Тап** в любом месте экрана → следующая страница (циклически)
+- **Свайп влево** → следующая страница, **свайп вправо** → предыдущая
+- **Тап на «Pi Dashboard»** (шапка) → выход из kiosk
+- Долгое нажатие (> 500ms) игнорируется
+
 Если `rotate.enabled: true` — страницы листаются автоматически.
+
+> ft5x06 DSI-тачскрин регистрируется как `mouse0`, поэтому навигация реализована через Pointer Events (не Touch Events).
 
 ### Реестр виджетов
 
@@ -245,6 +252,7 @@ INTERNET_INTERVAL=30
 ./manage.sh logs backend    # логи конкретного сервиса
 ./manage.sh status          # статус контейнеров
 ./manage.sh kiosk           # перезапустить Chromium на Pi
+./manage.sh kiosk-stop      # закрыть Chromium kiosk
 ```
 
 ---
@@ -265,6 +273,19 @@ INTERNET_INTERVAL=30
 - `--password-store=basic` — **критично**: без него GNOME Keyring блокирует запуск
 - `--ozone-platform=wayland` — Wayland backend
 - `--disable-restore-session-state` — не восстанавливать упавшую сессию
+- `--disable-features=Translate` — скрыть панель перевода
+
+### Политика Chromium — `/etc/chromium/policies/managed/disable_translate.json`
+
+```json
+{"TranslateEnabled": false}
+```
+
+Системный запрет предложения перевода. Создать командой:
+```bash
+sudo mkdir -p /etc/chromium/policies/managed
+echo '{"TranslateEnabled": false}' | sudo tee /etc/chromium/policies/managed/disable_translate.json
+```
 
 ### Docker network — `dadjet_co2_co2net`
 
@@ -383,5 +404,7 @@ export const WIDGET_REGISTRY = {
 ### Выйти из kiosk вручную
 
 ```bash
-ssh artfaal@192.168.2.215 "pkill -f chromium"
+./manage.sh kiosk-stop
+# или напрямую:
+ssh artfaal@192.168.2.215 "pkill -x chromium"
 ```
