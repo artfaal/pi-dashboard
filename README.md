@@ -95,6 +95,7 @@ pi-dashboard/
 │       ├── base.py             # BaseModule — абстрактный класс
 │       ├── co2.py              # CO2 + температура (co2mond Prometheus)
 │       ├── internet.py         # Ping интернет-таргетов
+│       ├── plants.py           # Датчики влажности растений (Pushgateway)
 │       └── weather.py          # Погода (Open-Meteo API)
 │
 ├── frontend/
@@ -112,6 +113,7 @@ pi-dashboard/
 │           ├── ClockWidget.tsx
 │           ├── CO2Widget.tsx
 │           ├── InternetWidget.tsx
+│           ├── PlantsWidget.tsx
 │           ├── WeatherWidget.tsx
 │           └── TempRoomWidget.tsx
 │
@@ -153,6 +155,7 @@ pi-dashboard/
 |----|------|----------------|------|
 | `co2` | `co2.py` | co2mond `:9999/metrics` | `ppm`, `temp` |
 | `internet` | `internet.py` | HTTP GET к таргетам | `online`, `targets[]` |
+| `plants` | `plants.py` | Pushgateway `/api/v1/metrics` | `plants[]` (name, humidity, humidity_min, humidity_max, temp, battery, image_url) |
 | `weather` | `weather.py` | Open-Meteo API | `temp`, `feels_like`, `humidity`, `wind_speed`, `wind_dir`, `condition`, `description`, `temp_max`, `temp_min`, … |
 
 ---
@@ -173,6 +176,9 @@ export const DASHBOARD_CONFIG = {
     ]},
     { id: 'sensors', label: 'Датчики', slots: [
       { widgetId: 'temp_room', moduleId: 'co2' },
+    ]},
+    { id: 'plants', label: 'Растения', slots: [
+      { widgetId: 'plants', moduleId: 'plants' },
     ]},
   ],
   rotate: { enabled: false, intervalSeconds: 20 },
@@ -199,6 +205,7 @@ export const DASHBOARD_CONFIG = {
 |------------|-----------|----------------------|----------------|
 | `co2` | `CO2Widget` | `co2` | Круговой gauge CO₂, sparkline, уровень |
 | `internet` | `InternetWidget` | `internet` | Online/Offline, список таргетов с latency |
+| `plants` | `PlantsWidget` | `plants` | 3 карточки на экран, фото, бар влажности min–max, статус ↓/✓/↑, температура, боковая пагинация |
 | `weather` | `WeatherWidget` | `weather` | Температура, ощущается, влажность, ветер, диапазон дня |
 | `temp_room` | `TempRoomWidget` | `co2` | Температура в помещении, comfort range |
 | *(header)* | `ClockWidget` | *(local)* | Часы HH:MM:SS + дата |
@@ -229,6 +236,13 @@ WEATHER_LOCATION=Москва
 WEATHER_INTERVAL=600
 
 INTERNET_INTERVAL=30
+
+PLANTS_PUSHGATEWAY_URL=https://pushgateway.example.com
+PLANTS_INTERVAL=300
+PLANTS_PROXY_HOST=          # SOCKS5 хост (опционально)
+PLANTS_PROXY_PORT=1080
+PLANTS_PROXY_USER=
+PLANTS_PROXY_PASSWORD=
 ```
 
 `config.yaml` использует `${VAR}` — подстановка происходит в `main.py` через `os.path.expandvars()`.
