@@ -36,6 +36,22 @@ export interface WeatherData {
   temp_min: number
 }
 
+export interface PlantData {
+  name: string
+  group: string
+  image_url: string
+  humidity: number
+  humidity_min: number
+  humidity_max: number
+  temp: number
+  battery?: number
+}
+
+export interface PlantsData {
+  plants: PlantData[]
+  count: number
+}
+
 // Standard props interface for all widgets
 export interface WidgetProps {
   data: unknown

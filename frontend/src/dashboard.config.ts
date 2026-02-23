@@ -27,6 +27,13 @@ export const DASHBOARD_CONFIG = {
         { widgetId: 'temp_room', moduleId: 'co2' },
       ],
     },
+    {
+      id: 'plants',
+      label: 'Растения',
+      slots: [
+        { widgetId: 'plants', moduleId: 'plants' },
+      ],
+    },
   ] as PageConfig[],
   rotate: { enabled: false, intervalSeconds: 20 },
 }

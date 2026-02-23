@@ -3,16 +3,20 @@ import json
 import logging
 import os
 import subprocess
+import urllib.parse
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx
 import yaml
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from modules.co2 import CO2Module
 from modules.internet import InternetModule
+from modules.plants import PlantsModule
 from modules.weather import WeatherModule
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
@@ -29,6 +33,7 @@ logger = logging.getLogger("dashboard")
 MODULE_REGISTRY = {
     "co2": CO2Module,
     "internet": InternetModule,
+    "plants": PlantsModule,
     "weather": WeatherModule,
 }
 
@@ -70,6 +75,9 @@ manager = ConnectionManager()
 
 # In-memory cache of the latest reading per module
 latest: dict[str, Any] = {}
+
+# References to running module instances (for use in routes)
+module_instances: dict[str, Any] = {}
 
 # ─── Module polling loop ───────────────────────────────────────────────────────
 
@@ -123,6 +131,7 @@ async def lifespan(app: FastAPI):
         interval = mod_cfg.get("interval", instance.interval)
         instance.interval = interval
 
+        module_instances[mod_id] = instance
         tasks.append(asyncio.create_task(module_loop(instance, interval)))
         logger.info("Started module '%s' (interval=%ds)", mod_id, interval)
 
@@ -162,6 +171,22 @@ async def kiosk_exit():
 async def snapshot():
     """Return the last known reading from every active module."""
     return latest
+
+
+@app.get("/api/plants/image/{name}")
+async def plants_image(name: str):
+    """Proxy plant images through SOCKS5 so the browser doesn't need direct access."""
+    module = module_instances.get("plants")
+    proxy = module.proxy if module else None
+    url = f"https://img.artfaal.ru/plants/{urllib.parse.quote(name)}.png"
+    try:
+        async with httpx.AsyncClient(timeout=10, proxy=proxy) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+        content_type = r.headers.get("content-type", "image/png")
+        return Response(content=r.content, media_type=content_type)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @app.websocket("/ws")
