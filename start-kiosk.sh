@@ -15,6 +15,8 @@ until curl -sf "$URL" > /dev/null 2>&1; do
 done
 
 echo "Dashboard ready after ${WAITED}s — launching Chromium kiosk"
+# Удаляем стейл-лок если остался от предыдущего краша
+rm -f "${HOME}/.config/chromium/SingletonLock"
 exec /usr/bin/chromium \
   --kiosk \
   --noerrdialogs \
