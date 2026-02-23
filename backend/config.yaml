@@ -1,20 +1,20 @@
 # Pi Dashboard — backend module configuration
-# Each module collects data and broadcasts it via WebSocket.
-# Add/remove modules here; restart backend to apply changes.
+# Значения берутся из .env (через docker-compose env_file).
+# Синтаксис: ${VAR} — подставляется из окружения контейнера.
 
 modules:
 
   # ── CO2 sensor via co2mond Prometheus metrics ──────────────────────────
   - id: co2
     enabled: true
-    interval: 30          # seconds between data updates
+    interval: ${CO2_INTERVAL}
     config:
-      metrics_url: "http://co2mond:9999/metrics"
+      metrics_url: "${CO2_METRICS_URL}"
 
   # ── Internet connectivity check ────────────────────────────────────────
   - id: internet
     enabled: true
-    interval: 30
+    interval: ${INTERNET_INTERVAL}
     config:
       targets:
         - name: "Google"
@@ -27,16 +27,9 @@ modules:
   # ── Weather via Open-Meteo (free, no API key) ──────────────────────────
   - id: weather
     enabled: true
-    interval: 600
+    interval: ${WEATHER_INTERVAL}
     config:
-      latitude: 55.7558
-      longitude: 37.6176
-      timezone: "Europe/Moscow"
-      location_name: "Москва"
-
-  # ── Example: add a new module by dropping its file in modules/ ──────────
-  # - id: my_sensor
-  #   enabled: false
-  #   interval: 60
-  #   config:
-  #     url: "http://my-sensor/api/data"
+      latitude: ${WEATHER_LAT}
+      longitude: ${WEATHER_LON}
+      timezone: "${WEATHER_TZ}"
+      location_name: "${WEATHER_LOCATION}"

@@ -11,6 +11,7 @@ services:
     image: pi-dashboard-backend:latest
     container_name: pi-dashboard-backend
     restart: unless-stopped
+    env_file: .env
     networks:
       - dashboard-net
       - dadjet_co2_co2net   # access co2mond metrics at http://co2mond:9999/metrics
@@ -31,7 +32,7 @@ services:
     container_name: pi-dashboard-frontend
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     networks:
       - dashboard-net
     depends_on:

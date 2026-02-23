@@ -86,6 +86,7 @@ export default function App() {
     <div
       className="w-full h-full flex flex-col bg-[#080c10] select-none"
       onClick={pages.length > 1 ? nextPage : undefined}
+      onContextMenu={(e) => e.preventDefault()}
     >
 
       {/* ── Header ─────────────────────────────────────────────────────── */}

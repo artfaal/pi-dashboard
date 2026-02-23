@@ -18,6 +18,9 @@
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Touch: prevent callout/magnifier on long press */
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
   }
 }
 

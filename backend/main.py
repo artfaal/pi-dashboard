@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -98,7 +99,8 @@ async def module_loop(module, interval: int) -> None:
 def _load_config() -> dict:
     path = Path(__file__).parent / "config.yaml"
     with path.open() as f:
-        return yaml.safe_load(f)
+        content = os.path.expandvars(f.read())
+    return yaml.safe_load(content)
 
 
 @asynccontextmanager

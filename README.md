@@ -1,55 +1,29 @@
 # Pi Dashboard
 
-Модульный home-дашборд для **Raspberry Pi 4B** с 7-дюймовым DSI-дисплеем.
+Модульный home-дашборд для **Raspberry Pi** с сенсорным дисплеем.
 Работает как полноэкранное Chromium-приложение в kiosk-режиме под Wayland (labwc).
 
 ---
 
 ## Содержание
 
-1. [Как это выглядит](#как-это-выглядит)
-2. [Архитектура](#архитектура)
-3. [Структура проекта](#структура-проекта)
-4. [Технологии](#технологии)
-5. [Модули бэкенда](#модули-бэкенда)
-6. [Виджеты фронтенда](#виджеты-фронтенда)
-7. [Деплой и обновление](#деплой-и-обновление)
+1. [Архитектура](#архитектура)
+2. [Структура проекта](#структура-проекта)
+3. [Технологии](#технологии)
+4. [Модули бэкенда](#модули-бэкенда)
+5. [Виджеты фронтенда](#виджеты-фронтенда)
+6. [Конфигурация (.env)](#конфигурация-env)
+7. [Управление (manage.sh)](#управление-managesh)
 8. [Настройки на Pi вне контейнеров](#настройки-на-pi-вне-контейнеров)
 9. [Как добавить новый модуль](#как-добавить-новый-модуль)
-10. [Полезные команды](#полезные-команды)
-11. [Известные нюансы](#известные-нюансы)
-
----
-
-## Как это выглядит
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  ● live   Pi Dashboard                          Пн, 23 Фев  14:32  │
-├──────────────────┬──────────────────┬───────────────────────────────┤
-│                  │                  │                               │
-│  CO₂             │  Температура     │  Интернет                     │
-│                  │                  │                               │
-│   ┌──(gauge)──┐  │      24.0        │  ● Online                     │
-│   │   727     │  │       °C         │                               │
-│   │   ppm     │  │   [Комфортно]    │  Google      ████████  108ms  │
-│   └───────────┘  │                  │  Cloudflare  ████████  105ms  │
-│   [Хорошо]       │  ═══▓════  10-40°│  Яндекс      ████████   84ms  │
-│   ▁▂▃▄▅▅▆▆▇      │                  │                               │
-│   24.0 °C        │                  │                               │
-└──────────────────┴──────────────────┴───────────────────────────────┘
-         800 × 480 px (7" DSI display, landscape)
-```
-
-**Дисплей:** 800×480, ориентация — landscape
-**Цвета CO₂:** зелёный < 800 ppm → жёлтый 800–1000 → оранжевый 1000–1500 → красный > 1500
+10. [Известные нюансы](#известные-нюансы)
 
 ---
 
 ## Архитектура
 
 ```
-                    Raspberry Pi 4B
+                    Raspberry Pi
 ┌────────────────────────────────────────────────────────────┐
 │                                                            │
 │  ┌──────────────────────────────────────────────────────┐  │
@@ -60,17 +34,18 @@
 │  │   │   Python FastAPI    │   │   nginx            │  │  │
 │  │   │   :8000 (internal)  │   │   :3000 → :80      │  │  │
 │  │   │                     │   │                    │  │  │
-│  │   │  ┌───────────────┐  │   │  /        → SPA   │  │  │
-│  │   │  │ co2 module    │  │   │  /ws      → :8000 │  │  │
-│  │   │  │ internet mod. │  │   │  /api/    → :8000 │  │  │
-│  │   │  │ <your module> │  │   └────────────────────┘  │  │
-│  │   │  └───────────────┘  │                            │  │
-│  │   │  WebSocket /ws       │                            │  │
+│  │   │  modules/           │   │  /        → SPA   │  │  │
+│  │   │    co2.py           │   │  /ws      → :8000 │  │  │
+│  │   │    internet.py      │   │  /api/    → :8000 │  │  │
+│  │   │    weather.py       │   └────────────────────┘  │  │
+│  │   │    <new_module>.py  │                            │  │
+│  │   │                     │                            │  │
+│  │   │  WebSocket /ws      │                            │  │
 │  │   └─────────────────────┘                            │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                     │                                      │
 │  ┌──────────────────┼───────────────────────────────────┐  │
-│  │  External Docker │networks                           │  │
+│  │  External Docker networks                            │  │
 │  │  dadjet_co2_co2net → co2mond:9999/metrics            │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                            │
@@ -84,21 +59,19 @@
 **Поток данных:**
 
 ```
-co2mond:9999        Internet targets
-     │                    │
-     ▼                    ▼
- CO2Module         InternetModule
-     │                    │
-     └──────┬─────────────┘
-            ▼
-    FastAPI WebSocket hub  (broadcasts every N seconds)
-            │
-            ▼ ws://localhost:3000/ws  (proxied by nginx)
-    React App в Chromium
-            │
-     ┌──────┴───────┐
-     ▼              ▼
-  CO2Widget   InternetWidget  …
+Внешние источники (co2mond, Open-Meteo, URLs)
+        │
+        ▼
+  Модули backend (collect() каждые N сек)
+        │
+        ▼
+  FastAPI WebSocket hub (broadcast)
+        │
+        ▼ ws://host/ws (nginx proxy)
+  React App в Chromium
+        │
+        ▼
+  Widget Registry → виджеты на активной странице
 ```
 
 ---
@@ -108,494 +81,307 @@ co2mond:9999        Internet targets
 ```
 pi-dashboard/
 │
+├── manage.sh                   # Управление: deploy/restart/stop/logs/kiosk
 ├── docker-compose.yml          # Compose-стек: backend + frontend
-├── .env.example                # Шаблон env (сейчас секретов нет)
+├── .env                        # Конфиг (gitignored) — скопировать из .env.example
+├── .env.example                # Шаблон конфига
 │
 ├── backend/
-│   ├── Dockerfile              # python:3.12-slim → uvicorn
-│   ├── requirements.txt        # fastapi, uvicorn, httpx, pyyaml
-│   ├── config.yaml             # ← ГЛАВНЫЙ КОНФИГ: модули, интервалы, параметры
-│   ├── main.py                 # FastAPI app: WebSocket hub, lifespan, API endpoints
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── config.yaml             # Модули и их параметры (использует ${VAR} из .env)
+│   ├── main.py                 # FastAPI: WebSocket hub, module runner, API
 │   └── modules/
-│       ├── base.py             # BaseModule — абстрактный класс для модулей
-│       ├── co2.py              # CO2Module: читает Prometheus метрики co2mond
-│       └── internet.py         # InternetModule: проверяет доступность URL
+│       ├── base.py             # BaseModule — абстрактный класс
+│       ├── co2.py              # CO2 + температура (co2mond Prometheus)
+│       ├── internet.py         # Ping интернет-таргетов
+│       └── weather.py          # Погода (Open-Meteo API)
 │
 ├── frontend/
-│   ├── Dockerfile              # node:22 build → nginx:stable-alpine serve
-│   ├── nginx.conf              # SPA + reverse proxy /ws и /api/ → backend
+│   ├── Dockerfile
+│   ├── nginx.conf
 │   ├── package.json
-│   ├── vite.config.ts
-│   ├── tailwind.config.js
-│   ├── tsconfig.json
-│   ├── index.html              # viewport=800 для 7" дисплея
 │   └── src/
-│       ├── main.tsx
-│       ├── App.tsx             # Корневой компонент: layout, WS-клиент, grid
-│       ├── index.css           # Tailwind + кастомные utility (.card, .glow-*)
-│       ├── types/
-│       │   └── index.ts        # ModulePayload, CO2Data, InternetData, …
+│       ├── App.tsx             # Корневой компонент: страницы, навигация тапом
+│       ├── dashboard.config.ts # Страницы и слоты виджетов
+│       ├── types/index.ts      # TypeScript-типы данных модулей
 │       ├── hooks/
-│       │   └── useWebSocket.ts # WS-клиент с авто-реконнектом (3s backoff)
+│       │   └── useWebSocket.ts # WS-клиент с авто-реконнектом
 │       └── widgets/
-│           ├── registry.ts     # ← РЕЕСТР ВИДЖЕТОВ: module_id → компонент
-│           ├── ClockWidget.tsx # Часы + дата в header
-│           ├── CO2Widget.tsx   # Круговой gauge + sparkline + уровень
-│           └── InternetWidget.tsx  # Статус + список таргетов с латентностью
+│           ├── registry.ts     # РЕЕСТР: widget_id → React-компонент
+│           ├── ClockWidget.tsx
+│           ├── CO2Widget.tsx
+│           ├── InternetWidget.tsx
+│           ├── WeatherWidget.tsx
+│           └── TempRoomWidget.tsx
 │
-└── start-kiosk.sh              # Скрипт запуска Chromium (ждёт :3000, потом kiosk)
+└── start-kiosk.sh              # Запуск Chromium kiosk (ждёт :3000)
 ```
 
 ---
 
 ## Технологии
 
-| Слой | Что | Версия | Зачем |
-|------|-----|--------|-------|
-| **Backend** | Python + FastAPI | 3.12 / 0.115 | Async, WebSocket из коробки, лёгкий |
-| **Transport** | WebSocket | — | Сервер пушит данные сам — нет клиентского polling |
-| **HTTP-клиент** | httpx | 0.28 | Async HTTP для модулей |
-| **Frontend** | React + Vite | 18 / 6 | Компонент = виджет, HMR при разработке |
-| **Стили** | TailwindCSS | 3.4 | Быстро красиво без кастомного CSS |
-| **Proxy** | nginx | stable-alpine | Один порт наружу, WS proxy, статика |
-| **Deploy** | Docker Compose | 29.2 | Уже используется на Pi |
-| **Display** | Chromium kiosk | — | Уже стоит, работает под Wayland |
-| **WM** | labwc (Wayland) | — | Стандартный для Raspberry Pi OS |
+| Слой | Что | Зачем |
+|------|-----|-------|
+| **Backend** | Python + FastAPI | Async, WebSocket из коробки |
+| **Transport** | WebSocket | Сервер пушит данные — нет polling |
+| **HTTP-клиент** | httpx | Async HTTP для модулей |
+| **Frontend** | React + Vite + TypeScript | Компонент = виджет |
+| **Стили** | TailwindCSS | Быстро, без кастомного CSS |
+| **Proxy** | nginx | Один порт наружу, WS proxy |
+| **Deploy** | Docker Compose | Изолировано, авто-старт |
+| **Display** | Chromium kiosk | Под Wayland, без UI браузера |
 
 ---
 
 ## Модули бэкенда
 
-### Как это работает
+`main.py` читает `config.yaml`, инстанцирует модули и запускает каждый в asyncio-таске. Таск вызывает `collect()` каждые `interval` секунд и бродкастит всем WS-клиентам.
 
-`main.py` при старте читает `config.yaml`, создаёт инстансы модулей и запускает каждый в отдельном asyncio-таске. Таск вызывает `module.collect()` каждые `interval` секунд и бродкастит результат всем подключённым WebSocket-клиентам.
-
-Формат сообщения по WebSocket:
+**WebSocket message format:**
 ```json
-{
-  "module": "co2",
-  "ok": true,
-  "data": { "ppm": 727, "temp": 24.0 }
-}
+{ "module": "co2", "ok": true, "data": { "ppm": 727, "temp": 24.0 } }
 ```
+При ошибке: `{ "module": "co2", "ok": false, "data": null, "error": "..." }`
 
-При ошибке:
-```json
-{
-  "module": "co2",
-  "ok": false,
-  "data": null,
-  "error": "Connection refused"
-}
-```
-
-При подключении нового WS-клиента он сразу получает последний snapshot всех модулей — не ждёт следующего цикла.
+При подключении клиент сразу получает snapshot всех модулей.
 
 ### Существующие модули
 
-#### `co2` — CO₂ и температура
-
-- **Источник:** `http://co2mond:9999/metrics` — Prometheus text format
-- **Контейнер co2mond** живёт в сети `dadjet_co2_co2net`, наш backend к ней подключён
-- **Данные:** `ppm` (целое), `temp` (float, °C)
-- **Параметры в config.yaml:** `metrics_url`
-
-```yaml
-- id: co2
-  enabled: true
-  interval: 30
-  config:
-    metrics_url: "http://co2mond:9999/metrics"
-```
-
-#### `internet` — Доступность интернета
-
-- **Источник:** HTTP GET к списку URL, измеряем latency
-- **Данные:** `online` (bool), `targets` (список `{name, ok, ms}`)
-- **Параметры в config.yaml:** `targets` — список `{name, url}`
-
-```yaml
-- id: internet
-  enabled: true
-  interval: 30
-  config:
-    targets:
-      - name: "Google"
-        url: "https://8.8.8.8"
-      - name: "Cloudflare"
-        url: "https://1.1.1.1"
-```
+| ID | Файл | Источник данных | Поля |
+|----|------|----------------|------|
+| `co2` | `co2.py` | co2mond `:9999/metrics` | `ppm`, `temp` |
+| `internet` | `internet.py` | HTTP GET к таргетам | `online`, `targets[]` |
+| `weather` | `weather.py` | Open-Meteo API | `temp`, `feels_like`, `humidity`, `wind_speed`, `wind_dir`, `condition`, `description`, `temp_max`, `temp_min`, … |
 
 ---
 
 ## Виджеты фронтенда
 
-### Реестр
+### Страницы и навигация
 
-`src/widgets/registry.ts` — словарь `module_id → React-компонент`. Именно здесь связывается ID модуля с тем, какой компонент его рендерит.
-
-### Текущие виджеты
-
-| Виджет | Источник | Что показывает |
-|--------|----------|----------------|
-| `ClockWidget` | локальное время браузера | Часы HH:MM:SS + дата в header |
-| `CO2Widget` | модуль `co2` | Круговой gauge, уровень (цвет), sparkline истории |
-| `InternetWidget` | модуль `internet` | Online/Offline + список таргетов с latency bar |
-| `TempWidget` | модуль `co2` | Большое число температуры + comfort range bar |
-
-### Данные в App.tsx
-
-```
-useWebSocket(WS_URL)
-  → data['co2']       → CO2Widget + TempWidget
-  → data['internet']  → InternetWidget
-```
-
-`App.tsx` также накапливает историю CO₂ в локальном state (последние 30 точек) для sparkline.
-
-### WS URL
+Страницы и состав виджетов задаются в `dashboard.config.ts`:
 
 ```typescript
-// frontend/src/App.tsx
-const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-const WS_URL = `${WS_PROTOCOL}//${window.location.host}/ws`
+export const DASHBOARD_CONFIG = {
+  pages: [
+    { id: 'home', label: 'Главная', slots: [
+      { widgetId: 'co2',      moduleId: 'co2'      },
+      { widgetId: 'weather',  moduleId: 'weather'  },
+      { widgetId: 'internet', moduleId: 'internet' },
+    ]},
+    { id: 'sensors', label: 'Датчики', slots: [
+      { widgetId: 'temp_room', moduleId: 'co2' },
+    ]},
+  ],
+  rotate: { enabled: false, intervalSeconds: 20 },
+}
 ```
 
-Использует `window.location.host` — работает и с `localhost:3000` (с Pi), и с `192.168.2.215:3000` (удалённо для отладки).
+**Навигация:** тап в любом месте экрана → следующая страница (циклически).
+Если `rotate.enabled: true` — страницы листаются автоматически.
+
+### Реестр виджетов
+
+`widgets/registry.ts` связывает `widgetId` → React-компонент.
+
+### Доступные виджеты
+
+| `widgetId` | Компонент | Источник (`moduleId`) | Что показывает |
+|------------|-----------|----------------------|----------------|
+| `co2` | `CO2Widget` | `co2` | Круговой gauge CO₂, sparkline, уровень |
+| `internet` | `InternetWidget` | `internet` | Online/Offline, список таргетов с latency |
+| `weather` | `WeatherWidget` | `weather` | Температура, ощущается, влажность, ветер, диапазон дня |
+| `temp_room` | `TempRoomWidget` | `co2` | Температура в помещении, comfort range |
+| *(header)* | `ClockWidget` | *(local)* | Часы HH:MM:SS + дата |
+
+Все виджеты принимают `{ data: unknown; error?: string }` — интерфейс `WidgetProps`.
 
 ---
 
-## Деплой и обновление
+## Конфигурация (.env)
 
-### Первый деплой
+Все настраиваемые параметры вынесены в `.env` (создать из `.env.example`).
+Docker Compose читает его автоматически и передаёт переменные в контейнер backend.
 
-```bash
-# На локальной машине — синхронизируем проект на Pi
-rsync -av --exclude='.git' --exclude='node_modules' --exclude='frontend/dist' \
-  . artfaal@192.168.2.215:/home/artfaal/pi-dashboard/
+```env
+PI_HOST=192.168.2.215       # для manage.sh
+PI_USER=artfaal
+PI_PATH=/home/artfaal/pi-dashboard
 
-# На Pi — собираем и запускаем
-ssh artfaal@192.168.2.215
-cd /home/artfaal/pi-dashboard
-docker compose build
-docker compose up -d
+FRONTEND_PORT=3000
+
+CO2_METRICS_URL=http://co2mond:9999/metrics
+CO2_INTERVAL=30
+
+WEATHER_LAT=55.7558
+WEATHER_LON=37.6176
+WEATHER_TZ=Europe/Moscow
+WEATHER_LOCATION=Москва
+WEATHER_INTERVAL=600
+
+INTERNET_INTERVAL=30
 ```
 
-### Обновление (типичный workflow)
+`config.yaml` использует `${VAR}` — подстановка происходит в `main.py` через `os.path.expandvars()`.
+
+---
+
+## Управление (manage.sh)
 
 ```bash
-# 1. Вносим изменения локально
-# 2. Синхронизируем
-rsync -av --exclude='.git' --exclude='node_modules' --exclude='frontend/dist' \
-  . artfaal@192.168.2.215:/home/artfaal/pi-dashboard/
+# Полный деплой (sync + rebuild + restart)
+./manage.sh deploy
 
-# 3. Пересобираем изменившийся образ и рестартуем
-ssh artfaal@192.168.2.215 "cd /home/artfaal/pi-dashboard && docker compose up -d --build"
+# Только перезапустить (без rebuild, например после смены .env)
+./manage.sh restart
+
+# Другие команды
+./manage.sh sync            # синхронизировать файлы без rebuild
+./manage.sh stop            # остановить контейнеры
+./manage.sh start           # запустить контейнеры
+./manage.sh logs            # логи всех сервисов
+./manage.sh logs backend    # логи конкретного сервиса
+./manage.sh status          # статус контейнеров
+./manage.sh kiosk           # перезапустить Chromium на Pi
 ```
-
-Если менялся только `config.yaml` (без кода) — достаточно рестарта без пересборки:
-```bash
-ssh artfaal@192.168.2.215 "cd /home/artfaal/pi-dashboard && docker compose restart backend"
-```
-
-### Авто-старт при перезагрузке Pi
-
-`restart: unless-stopped` в `docker-compose.yml` — Docker сам поднимает контейнеры при старте демона.
-Chromium стартует через `labwc autostart` → `start-kiosk.sh` (см. раздел ниже).
 
 ---
 
 ## Настройки на Pi вне контейнеров
 
-Это важный раздел — всё, что живёт **за пределами Docker**, но необходимо для работы дашборда.
+### labwc autostart — `~/.config/labwc/autostart`
 
-### 1. labwc autostart — `~/.config/labwc/autostart`
-
-Этот файл labwc читает при старте Wayland-сессии. Он **перекрывает** системный `/etc/xdg/labwc/autostart`.
-
-Текущее содержимое:
 ```bash
-# Включаем DSI-дисплей
 /usr/bin/wlr-randr --output DSI-1 --on &
-
-# Запускаем Chromium в kiosk-режиме (через wait-скрипт)
 /home/artfaal/pi-dashboard/start-kiosk.sh &
 ```
 
-**Важно:** Системный autostart запускает `wf-panel-pi` (тулбар) и `pcmanfm-pi` (файловый менеджер/обои). Наш пользовательский autostart их **не запускает** — это сделано намеренно для чистого kiosk-режима. Если нужно вернуть тулбар, раскомменти `lwrespawn /usr/bin/wf-panel-pi &`.
+### Kiosk-скрипт — `start-kiosk.sh`
 
-### 2. Kiosk-скрипт — `~/pi-dashboard/start-kiosk.sh`
+Ждёт пока `:3000` ответит, потом запускает Chromium с флагами:
+- `--kiosk` — полный экран без UI
+- `--password-store=basic` — **критично**: без него GNOME Keyring блокирует запуск
+- `--ozone-platform=wayland` — Wayland backend
+- `--disable-restore-session-state` — не восстанавливать упавшую сессию
 
-```bash
-#!/bin/bash
-URL="http://localhost:3000"
+### Docker network — `dadjet_co2_co2net`
 
-# Ждём пока frontend nginx ответит (до 60 секунд)
-until curl -sf "$URL" > /dev/null 2>&1; do sleep 2; done
-
-# Запускаем Chromium в kiosk-режиме
-exec /usr/bin/chromium \
-  --kiosk \                          # полный экран, нет UI браузера
-  --noerrdialogs \                   # нет диалогов об ошибках
-  --no-first-run \                   # нет welcome-экрана
-  --ozone-platform=wayland \         # Wayland backend (не X11)
-  --password-store=basic \           # ВАЖНО: отключает запрос GNOME Keyring
-  --disable-session-crashed-bubble \ # нет диалога "восстановить сессию"
-  --disable-restore-session-state \  # не восстанавливать прошлую сессию
-  http://localhost:3000
-```
-
-**Ключевой флаг — `--password-store=basic`:** без него Chromium показывает диалог разблокировки GNOME Keyring при каждом запуске, что ломает kiosk-режим.
-
-**Почему `exec` а не `&`:** `exec` заменяет процесс bash на chromium — нет лишнего родительского процесса, и labwc корректно отслеживает жизнь Chromium.
-
-### 3. Docker network — `dadjet_co2_co2net`
-
-Backend подключён к внешней сети `dadjet_co2_co2net` (создана compose-стеком `dadjet_co2`). Это позволяет обращаться к контейнеру `co2mond` по имени:
-```
-http://co2mond:9999/metrics
-```
-
-В `docker-compose.yml`:
-```yaml
-networks:
-  dadjet_co2_co2net:
-    external: true   # сеть уже существует, не создаём новую
-```
-
-Если `dadjet_co2` стек не запущен — backend упадёт с ошибкой при старте сети. Решение: `docker compose -f ~/dadjet_co2/docker-compose.yml up -d` перед нашим стеком.
-
-### 4. Что НЕ настраивали (и почему не нужно)
-
-- **systemd-сервис для Docker:** не нужен — `restart: unless-stopped` + Docker daemon в systemd достаточно
-- **автологин:** уже настроен в Raspberry Pi OS для пользователя `artfaal`
-- **автостарт Wayland:** уже настроен в Raspberry Pi OS (lightdm или аналог)
-- **разрешение экрана:** DSI-дисплей определяется автоматически как `DSI-1` с нативным разрешением
+Backend подключён к внешней сети `dadjet_co2_co2net` (стек `~/dadjet_co2/`).
+Это даёт доступ к `co2mond` по имени: `http://co2mond:9999/metrics`.
 
 ---
 
 ## Как добавить новый модуль
 
-Пример: добавляем модуль для мониторинга HTTP-датчика растений.
-
-### Шаг 1 — Backend: создать файл модуля
+### 1. Backend — создать модуль
 
 ```python
-# backend/modules/plant_sensor.py
+# backend/modules/my_sensor.py
 import httpx
 from .base import BaseModule
 
-class PlantSensorModule(BaseModule):
-    module_id = "plant"
+class MySensorModule(BaseModule):
+    module_id = "my_sensor"
     interval = 60
 
-    def __init__(self, sensor_url: str = "http://my-sensor/api") -> None:
+    def __init__(self, sensor_url: str = "http://sensor/api") -> None:
         self.sensor_url = sensor_url
 
     async def collect(self) -> dict:
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(self.sensor_url)
             r.raise_for_status()
-            data = r.json()
-        return {
-            "moisture": data["soil_moisture"],
-            "name": data["plant_name"],
-        }
+        return {"value": r.json()["value"]}
 ```
 
-### Шаг 2 — Backend: зарегистрировать в `main.py`
+### 2. Backend — зарегистрировать в `main.py`
 
 ```python
-# main.py — в MODULE_REGISTRY
-from modules.plant_sensor import PlantSensorModule
+from modules.my_sensor import MySensorModule
 
 MODULE_REGISTRY = {
-    "co2": CO2Module,
-    "internet": InternetModule,
-    "plant": PlantSensorModule,   # ← добавить
+    ...,
+    "my_sensor": MySensorModule,
 }
 ```
 
-### Шаг 3 — Backend: включить в `config.yaml`
+### 3. Backend — включить в `config.yaml`
 
 ```yaml
-- id: plant
+- id: my_sensor
   enabled: true
   interval: 60
   config:
-    sensor_url: "http://192.168.2.100/api"
+    sensor_url: "${MY_SENSOR_URL}"
 ```
 
-### Шаг 4 — Frontend: добавить тип данных
+### 4. Frontend — добавить тип данных
 
 ```typescript
 // src/types/index.ts
-export interface PlantData {
-  moisture: number
-  name: string
-}
+export interface MySensorData { value: number }
 ```
 
-### Шаг 5 — Frontend: создать виджет
+### 5. Frontend — создать виджет
 
 ```tsx
-// src/widgets/PlantWidget.tsx
-import type { PlantData } from '../types'
+// src/widgets/MySensorWidget.tsx
+import type { WidgetProps } from '../types'
 
-interface Props {
-  data: PlantData | null
-  error?: string
-}
-
-export function PlantWidget({ data, error }: Props) {
-  if (!data) return <div>Нет данных</div>
-  return (
-    <div>
-      <div>{data.name}</div>
-      <div>Влажность: {data.moisture}%</div>
-    </div>
-  )
+export function MySensorWidget({ data, error }: WidgetProps) {
+  const d = data as { value: number } | null
+  if (!d) return <div>{error ?? 'Ожидание…'}</div>
+  return <div>{d.value}</div>
 }
 ```
 
-### Шаг 6 — Frontend: зарегистрировать в реестре
+### 6. Frontend — зарегистрировать в `registry.ts`
 
 ```typescript
-// src/widgets/registry.ts
-import { PlantWidget } from './PlantWidget'
+import { MySensorWidget } from './MySensorWidget'
 
 export const WIDGET_REGISTRY = {
-  co2: CO2Widget,
-  internet: InternetWidget,
-  plant: PlantWidget,           // ← добавить
+  ...,
+  my_sensor: MySensorWidget,
 }
 ```
 
-### Шаг 7 — Frontend: добавить в layout (`App.tsx`)
+### 7. Frontend — добавить в страницу в `dashboard.config.ts`
 
-```tsx
-// В grid в App.tsx
-const plantPayload = data['plant']
-const plantData = plantPayload?.ok ? (plantPayload.data as PlantData) : null
-
-// В JSX:
-<WidgetCard>
-  <PlantWidget data={plantData} error={plantPayload?.error} />
-</WidgetCard>
+```typescript
+{ widgetId: 'my_sensor', moduleId: 'my_sensor' }
 ```
 
-### Шаг 8 — Пересобрать и задеплоить
+### 8. Деплой
 
 ```bash
-rsync -av --exclude='.git' --exclude='node_modules' . artfaal@192.168.2.215:/home/artfaal/pi-dashboard/
-ssh artfaal@192.168.2.215 "cd /home/artfaal/pi-dashboard && docker compose up -d --build"
-```
-
----
-
-## Полезные команды
-
-### На локальной машине
-
-```bash
-# Синхронизировать файлы на Pi
-rsync -av --exclude='.git' --exclude='node_modules' --exclude='frontend/dist' \
-  . artfaal@192.168.2.215:/home/artfaal/pi-dashboard/
-
-# Открыть дашборд в браузере для проверки (с локальной машины)
-open http://192.168.2.215:3000
-```
-
-### На Pi (ssh artfaal@192.168.2.215)
-
-```bash
-cd /home/artfaal/pi-dashboard
-
-# Статус контейнеров
-docker compose ps
-
-# Логи в реальном времени
-docker compose logs -f backend
-docker compose logs -f frontend
-
-# Пересобрать и перезапустить всё
-docker compose up -d --build
-
-# Перезапустить только backend (если менялся config.yaml или Python)
-docker compose restart backend
-
-# Проверить что API отвечает
-curl http://localhost:3000/api/snapshot | python3 -m json.tool
-
-# Проверить co2mond напрямую
-curl http://172.20.0.2:9999/metrics
-
-# Запустить Chromium вручную (без перезагрузки)
-WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 \
-  /home/artfaal/pi-dashboard/start-kiosk.sh &
-
-# Убить Chromium
-pkill -f chromium
+./manage.sh deploy
 ```
 
 ---
 
 ## Известные нюансы
 
-### Chromium и GNOME Keyring
+### `--password-store=basic` в Chromium
 
-Без флага `--password-store=basic` Chromium показывает диалог разблокировки системного keyring при каждом старте. Это ломает kiosk-режим (появляется диалог поверх дашборда). Флаг уже прописан в `start-kiosk.sh`.
+Без этого флага Chromium показывает диалог GNOME Keyring при каждом старте — ломает kiosk. Флаг прописан в `start-kiosk.sh`.
 
 ### EDID ошибка в логах labwc
 
 ```
-[ERROR] [backend/drm/util.c:65] Failed to parse EDID
+[ERROR] Failed to parse EDID
 ```
 
-Это нормально для DSI-дисплея Raspberry Pi — у него нет стандартного EDID. Дисплей работает корректно, ошибку игнорируем.
+Нормально для DSI-дисплея — у него нет стандартного EDID. Игнорировать.
 
-### Порядок запуска контейнеров
+### Порядок запуска
 
-`dadjet_co2` стек (`co2mond`, `co2push`) должен быть запущен **до** нашего backend, иначе сеть `dadjet_co2_co2net` не существует и `docker compose up` упадёт. На практике это не проблема, т.к. оба стека имеют `restart: unless-stopped` и docker-daemon стартует их автоматически.
+`dadjet_co2` стек должен быть запущен до нашего backend — иначе сеть `dadjet_co2_co2net` не существует. На практике не проблема: оба стека имеют `restart: unless-stopped`.
 
-### Разрешение экрана
+### Выйти из kiosk вручную
 
-Frontend оптимизирован под **800×480** (стандартное разрешение 7" Pi дисплея). В `index.html` прописан `content="width=800"`. Если дисплей другого разрешения — правим viewport и grid в `App.tsx`.
-
-### Kiosk vs обычный режим
-
-Когда нужно выйти из kiosk (например, для отладки):
-- Подключиться по SSH и `pkill -f chromium`
-- После этого labwc покажет рабочий стол (если wf-panel-pi не запущен — будет пустой экран)
-- Вернуть нормальный вид: `WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 wf-panel-pi &`
-
-### HMR при разработке
-
-Для локальной разработки можно запустить frontend dev-сервер и проксировать API на Pi:
 ```bash
-# В frontend/vite.config.ts можно добавить proxy:
-server: {
-  proxy: {
-    '/ws':  { target: 'ws://192.168.2.215:3000', ws: true },
-    '/api': { target: 'http://192.168.2.215:3000' },
-  }
-}
+ssh artfaal@192.168.2.215 "pkill -f chromium"
 ```
-Тогда `npm run dev` локально будет брать данные с Pi.
-
----
-
-## Pi — железо и окружение
-
-| Параметр | Значение |
-|----------|----------|
-| Железо | Raspberry Pi 4B |
-| ОС | Debian 13 (Trixie) aarch64 |
-| Дисплей | 7" DSI, `DSI-1`, 800×480 |
-| WM | labwc (Wayland compositor) |
-| Браузер | Chromium `/usr/bin/chromium` |
-| Docker | 29.2.1 |
-| IP | 192.168.2.215 |
-| Пользователь | artfaal |
-| Проект на Pi | `/home/artfaal/pi-dashboard/` |
-| Другие compose-стеки | `~/dadjet_co2/` (co2mond, co2push), `~/tuya-exporter/`, `~/divoom/` |
