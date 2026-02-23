@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useWebSocket } from './hooks/useWebSocket'
 import { ClockWidget } from './widgets/ClockWidget'
 import { WIDGET_REGISTRY } from './widgets/registry'
@@ -82,10 +82,23 @@ export default function App() {
 
   const nextPage = () => goToPage((pageIdx + 1) % pages.length)
 
+  // Short-tap detection: only navigate if touch lasted < 300ms
+  const touchStartRef = useRef<number>(0)
+  const handleTouchStart = useCallback(() => {
+    touchStartRef.current = Date.now()
+  }, [])
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (pages.length > 1 && Date.now() - touchStartRef.current < 300) {
+      e.preventDefault()
+      nextPage()
+    }
+  }, [pages.length, nextPage])
+
   return (
     <div
       className="w-full h-full flex flex-col bg-[#080c10] select-none"
-      onClick={pages.length > 1 ? nextPage : undefined}
+      onTouchStart={pages.length > 1 ? handleTouchStart : undefined}
+      onTouchEnd={pages.length > 1 ? handleTouchEnd : undefined}
       onContextMenu={(e) => e.preventDefault()}
     >
 
