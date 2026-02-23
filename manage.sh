@@ -27,6 +27,10 @@ _sync() {
     --exclude='node_modules' \
     --exclude='frontend/dist' \
     "$(dirname "$0")/" "${PI}:${PI_PATH}/"
+  # Всегда перезаписываем .env (--ignore-times гарантирует push даже если Pi-версия новее)
+  echo "→ Pushing .env ..."
+  rsync -av --ignore-times \
+    "$(dirname "$0")/.env" "${PI}:${PI_PATH}/.env"
 }
 
 case "$CMD" in
