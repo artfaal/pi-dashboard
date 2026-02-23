@@ -1,0 +1,32 @@
+# Pi Dashboard — backend module configuration
+# Each module collects data and broadcasts it via WebSocket.
+# Add/remove modules here; restart backend to apply changes.
+
+modules:
+
+  # ── CO2 sensor via co2mond Prometheus metrics ──────────────────────────
+  - id: co2
+    enabled: true
+    interval: 30          # seconds between data updates
+    config:
+      metrics_url: "http://co2mond:9999/metrics"
+
+  # ── Internet connectivity check ────────────────────────────────────────
+  - id: internet
+    enabled: true
+    interval: 30
+    config:
+      targets:
+        - name: "Google"
+          url: "https://8.8.8.8"
+        - name: "Cloudflare"
+          url: "https://1.1.1.1"
+        - name: "Яндекс"
+          url: "https://ya.ru"
+
+  # ── Example: add a new module by dropping its file in modules/ ──────────
+  # - id: my_sensor
+  #   enabled: false
+  #   interval: 60
+  #   config:
+  #     url: "http://my-sensor/api/data"

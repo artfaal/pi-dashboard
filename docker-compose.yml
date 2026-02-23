@@ -1,0 +1,49 @@
+name: pi-dashboard
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend — FastAPI + WebSocket hub, modular data collectors
+  # ─────────────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+    image: pi-dashboard-backend:latest
+    container_name: pi-dashboard-backend
+    restart: unless-stopped
+    networks:
+      - dashboard-net
+      - dadjet_co2_co2net   # access co2mond metrics at http://co2mond:9999/metrics
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend — React SPA built with Vite, served by nginx
+  # nginx also reverse-proxies /ws and /api/ → backend
+  # ─────────────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+    image: pi-dashboard-frontend:latest
+    container_name: pi-dashboard-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    networks:
+      - dashboard-net
+    depends_on:
+      - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+networks:
+  dashboard-net:
+    driver: bridge
+  dadjet_co2_co2net:
+    external: true
