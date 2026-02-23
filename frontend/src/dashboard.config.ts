@@ -21,13 +21,6 @@ export const DASHBOARD_CONFIG = {
       ],
     },
     {
-      id: 'sensors',
-      label: 'Датчики',
-      slots: [
-        { widgetId: 'temp_room', moduleId: 'co2' },
-      ],
-    },
-    {
       id: 'plants',
       label: 'Растения',
       slots: [

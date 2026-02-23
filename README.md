@@ -176,9 +176,6 @@ export const DASHBOARD_CONFIG = {
       { widgetId: 'weather',  moduleId: 'weather'  },
       { widgetId: 'internet', moduleId: 'internet' },
     ]},
-    { id: 'sensors', label: 'Датчики', slots: [
-      { widgetId: 'temp_room', moduleId: 'co2' },
-    ]},
     { id: 'plants', label: 'Растения', slots: [
       { widgetId: 'plants', moduleId: 'plants' },
     ]},
