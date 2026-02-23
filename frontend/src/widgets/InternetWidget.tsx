@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import type { InternetData, InternetTarget } from '../types'
+import type { InternetData, InternetTarget, WidgetProps } from '../types'
 
 // ── Latency bar ────────────────────────────────────────────────────────────────
 
@@ -58,15 +58,11 @@ function TargetRow({ target }: { target: InternetTarget }) {
 
 // ── Main widget ────────────────────────────────────────────────────────────────
 
-interface Props {
-  data: InternetData | null
-  error?: string
-}
-
-export function InternetWidget({ data, error }: Props) {
+export function InternetWidget({ data, error }: WidgetProps) {
+  const internetData = data as InternetData | null
   const prevRef = useRef<InternetData | null>(null)
-  if (data) prevRef.current = data
-  const displayed = data ?? prevRef.current
+  if (internetData) prevRef.current = internetData
+  const displayed = internetData ?? prevRef.current
 
   if (!displayed) {
     return (

@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import type { CO2Data } from '../types'
+import { useEffect, useRef, useState } from 'react'
+import type { CO2Data, WidgetProps } from '../types'
 
 // ── CO2 level thresholds ───────────────────────────────────────────────────────
 
@@ -150,16 +150,18 @@ function Sparkline({ values, color }: SparklineProps) {
 
 // ── Main CO2 widget ────────────────────────────────────────────────────────────
 
-interface Props {
-  data: CO2Data | null
-  history: number[]
-  error?: string
-}
-
-export function CO2Widget({ data, history, error }: Props) {
+export function CO2Widget({ data, error }: WidgetProps) {
+  const co2Data = data as CO2Data | null
+  const [history, setHistory] = useState<number[]>([])
   const prevRef = useRef<CO2Data | null>(null)
-  if (data) prevRef.current = data
-  const displayed = data ?? prevRef.current
+  if (co2Data) prevRef.current = co2Data
+  const displayed = co2Data ?? prevRef.current
+
+  useEffect(() => {
+    if (co2Data?.ppm != null)
+      setHistory((prev) => [...prev.slice(-29), co2Data.ppm])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [co2Data?.ppm])
 
   if (!displayed) {
     return (

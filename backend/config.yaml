@@ -24,6 +24,16 @@ modules:
         - name: "Яндекс"
           url: "https://ya.ru"
 
+  # ── Weather via Open-Meteo (free, no API key) ──────────────────────────
+  - id: weather
+    enabled: true
+    interval: 600
+    config:
+      latitude: 55.7558
+      longitude: 37.6176
+      timezone: "Europe/Moscow"
+      location_name: "Москва"
+
   # ── Example: add a new module by dropping its file in modules/ ──────────
   # - id: my_sensor
   #   enabled: false

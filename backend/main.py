@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from modules.co2 import CO2Module
 from modules.internet import InternetModule
+from modules.weather import WeatherModule
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ logger = logging.getLogger("dashboard")
 MODULE_REGISTRY = {
     "co2": CO2Module,
     "internet": InternetModule,
+    "weather": WeatherModule,
 }
 
 # ─── WebSocket connection manager ─────────────────────────────────────────────

@@ -9,11 +9,15 @@
  */
 
 import type { ComponentType } from 'react'
+import type { WidgetProps } from '../types'
 import { CO2Widget } from './CO2Widget'
 import { InternetWidget } from './InternetWidget'
+import { WeatherWidget } from './WeatherWidget'
+import { TempRoomWidget } from './TempRoomWidget'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const WIDGET_REGISTRY: Record<string, ComponentType<any>> = {
-  co2: CO2Widget,
-  internet: InternetWidget,
+export const WIDGET_REGISTRY: Record<string, ComponentType<WidgetProps>> = {
+  co2:       CO2Widget,
+  internet:  InternetWidget,
+  weather:   WeatherWidget,
+  temp_room: TempRoomWidget,
 }
