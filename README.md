@@ -37,7 +37,8 @@
 │  │   │  modules/           │   │  /        → SPA   │  │  │
 │  │   │    co2.py           │   │  /ws      → :8000 │  │  │
 │  │   │    internet.py      │   │  /api/    → :8000 │  │  │
-│  │   │    weather.py       │   └────────────────────┘  │  │
+│  │   │    plants.py        │   └────────────────────┘  │  │
+│  │   │    weather.py       │                            │  │
 │  │   │    <new_module>.py  │                            │  │
 │  │   │                     │                            │  │
 │  │   │  WebSocket /ws      │                            │  │
@@ -105,6 +106,7 @@ pi-dashboard/
 │   └── src/
 │       ├── App.tsx             # Корневой компонент: страницы, навигация тапом
 │       ├── dashboard.config.ts # Страницы и слоты виджетов
+│       ├── vite-env.d.ts       # Типы для import.meta.env (VITE_* переменные)
 │       ├── types/index.ts      # TypeScript-типы данных модулей
 │       ├── hooks/
 │       │   └── useWebSocket.ts # WS-клиент с авто-реконнектом
@@ -181,7 +183,8 @@ export const DASHBOARD_CONFIG = {
       { widgetId: 'plants', moduleId: 'plants' },
     ]},
   ],
-  rotate: { enabled: false, intervalSeconds: 20 },
+  // Значения берутся из .env через VITE_ROTATE_ENABLED / VITE_ROTATE_INTERVAL
+  rotate: { enabled: ..., intervalSeconds: ... },
 }
 ```
 
@@ -191,7 +194,7 @@ export const DASHBOARD_CONFIG = {
 - **Тап на «Pi Dashboard»** (шапка) → выход из kiosk
 - Долгое нажатие (> 500ms) игнорируется
 
-Если `rotate.enabled: true` — страницы листаются автоматически.
+Авторотация управляется через `VITE_ROTATE_ENABLED` / `VITE_ROTATE_INTERVAL` в `.env`.
 
 > ft5x06 DSI-тачскрин регистрируется как `mouse0`, поэтому навигация реализована через Pointer Events (не Touch Events).
 
@@ -205,7 +208,7 @@ export const DASHBOARD_CONFIG = {
 |------------|-----------|----------------------|----------------|
 | `co2` | `CO2Widget` | `co2` | Круговой gauge CO₂, sparkline, уровень |
 | `internet` | `InternetWidget` | `internet` | Online/Offline, список таргетов с latency |
-| `plants` | `PlantsWidget` | `plants` | 3 карточки на экран, фото, бар влажности min–max, статус ↓/✓/↑, температура, боковая пагинация |
+| `plants` | `PlantsWidget` | `plants` | N карточек на экран (`VITE_PLANTS_PER_PAGE`), фото, бар влажности min–max, статус ↓/✓/↑, температура, боковая пагинация |
 | `weather` | `WeatherWidget` | `weather` | Температура, ощущается, влажность, ветер, диапазон дня |
 | `temp_room` | `TempRoomWidget` | `co2` | Температура в помещении, comfort range |
 | *(header)* | `ClockWidget` | *(local)* | Часы HH:MM:SS + дата |
@@ -217,49 +220,80 @@ export const DASHBOARD_CONFIG = {
 ## Конфигурация (.env)
 
 Все настраиваемые параметры вынесены в `.env` (создать из `.env.example`).
-Docker Compose читает его автоматически и передаёт переменные в контейнер backend.
+
+**Два типа переменных:**
+- Обычные — читаются бэкендом в рантайме (`env_file: .env` в docker-compose)
+- `VITE_*` — передаются как Docker build args и **встраиваются Vite при сборке** фронтенда; изменение требует rebuild (`./manage.sh deploy`)
 
 ```env
-PI_HOST=192.168.2.215       # для manage.sh
+# ── Pi connection (используется manage.sh) ────────────────────────────────────
+PI_HOST=192.168.2.215
 PI_USER=artfaal
 PI_PATH=/home/artfaal/pi-dashboard
 
+# ── Dashboard ─────────────────────────────────────────────────────────────────
 FRONTEND_PORT=3000
 
+# ── Авторотация страниц (VITE — rebuild при изменении) ───────────────────────
+VITE_ROTATE_ENABLED=false       # true — листать страницы автоматически
+VITE_ROTATE_INTERVAL=20         # интервал авторотации, секунды
+
+# ── CO2 виджет (VITE — rebuild при изменении) ─────────────────────────────────
+VITE_CO2_OK=800                 # порог «Хорошо», ppm
+VITE_CO2_WARN=1000              # порог «Норма»
+VITE_CO2_BAD=1500               # порог «Высокий»
+VITE_CO2_MAX=2000               # максимум шкалы gauge
+VITE_CO2_HISTORY=30             # точек в sparkline
+
+# ── Температура (VITE — rebuild при изменении) ────────────────────────────────
+VITE_TEMP_COLD=18               # нижняя граница комфортной зоны, °C
+VITE_TEMP_WARM=24               # верхняя граница
+VITE_TEMP_SCALE_MIN=10          # минимум шкалы бара
+VITE_TEMP_SCALE_MAX=40          # максимум шкалы бара
+
+# ── Растения — фронтенд (VITE — rebuild при изменении) ───────────────────────
+VITE_PLANTS_PER_PAGE=3          # карточек на экране одновременно
+
+# ── CO2 сенсор ────────────────────────────────────────────────────────────────
 CO2_METRICS_URL=http://co2mond:9999/metrics
 CO2_INTERVAL=30
 
+# ── Погода (Open-Meteo, без API ключа) ────────────────────────────────────────
 WEATHER_LAT=55.7558
 WEATHER_LON=37.6176
 WEATHER_TZ=Europe/Moscow
 WEATHER_LOCATION=Москва
 WEATHER_INTERVAL=600
 
+# ── Интернет ──────────────────────────────────────────────────────────────────
 INTERNET_INTERVAL=30
 
+# ── Растения — бэкенд ─────────────────────────────────────────────────────────
 PLANTS_PUSHGATEWAY_URL=https://pushgateway.example.com
 PLANTS_INTERVAL=300
-PLANTS_PROXY_HOST=          # SOCKS5 хост (опционально)
+PLANTS_IMAGE_BASE_URL=https://img.example.com/plants
+PLANTS_IMAGE_TIMEOUT=10
+PLANTS_PROXY_HOST=              # SOCKS5 прокси (опционально)
 PLANTS_PROXY_PORT=1080
 PLANTS_PROXY_USER=
 PLANTS_PROXY_PASSWORD=
 ```
 
-`config.yaml` использует `${VAR}` — подстановка происходит в `main.py` через `os.path.expandvars()`.
+`backend/config.yaml` использует `${VAR}` — подстановка через `os.path.expandvars()` в `main.py`.
 
 ---
 
 ## Управление (manage.sh)
 
 ```bash
-# Полный деплой (sync + rebuild + restart)
+# Полный деплой: sync + .env + rebuild + restart + kiosk
 ./manage.sh deploy
 
-# Только перезапустить (без rebuild, например после смены .env)
+# Только перезапустить контейнеры (без rebuild — для изменений бэкенд-конфига)
 ./manage.sh restart
 
 # Другие команды
-./manage.sh sync            # синхронизировать файлы без rebuild
+./manage.sh sync            # синхронизировать файлы (включая .env) без rebuild
 ./manage.sh stop            # остановить контейнеры
 ./manage.sh start           # запустить контейнеры
 ./manage.sh logs            # логи всех сервисов
@@ -268,6 +302,10 @@ PLANTS_PROXY_PASSWORD=
 ./manage.sh kiosk           # перезапустить Chromium на Pi
 ./manage.sh kiosk-stop      # закрыть Chromium kiosk
 ```
+
+> `.env` при `deploy` и `sync` всегда принудительно перезаписывается на Pi (`--ignore-times`), даже если удалённый файл новее.
+>
+> Изменение `VITE_*` переменных вступает в силу только после `deploy` (требуется пересборка фронтенда).
 
 ---
 
