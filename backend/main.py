@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import subprocess
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -148,6 +149,13 @@ app.add_middleware(
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "modules": list(latest.keys())}
+
+
+@app.get("/api/kiosk/exit")
+async def kiosk_exit():
+    """Kill the Chromium kiosk process on the host."""
+    subprocess.Popen(["pkill", "-f", "chromium"])
+    return {"ok": True}
 
 
 @app.get("/api/snapshot")
