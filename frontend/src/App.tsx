@@ -42,15 +42,11 @@ function WidgetCard({ children }: { children: React.ReactNode }) {
 export default function App() {
   const { connected, data: wsData } = useWebSocket(WS_URL)
   const [pageIdx, setPageIdx] = useState(0)
-  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null)
-  const headerRef   = useRef<HTMLElement>(null)
-  const pageIdxRef  = useRef(0)       // mirror of pageIdx for use inside listeners
-  const startTouchRef = useRef<{ x: number; y: number; t: number } | null>(null)
+  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pressRef  = useRef<{ x: number; y: number; t: number } | null>(null)
+  const headerRef = useRef<number>(0) // stores pointerdown time for header
 
   const { rotate, pages } = DASHBOARD_CONFIG
-
-  // Keep ref in sync so listeners always see current page without re-registering
-  useEffect(() => { pageIdxRef.current = pageIdx }, [pageIdx])
 
   const goToPage = useCallback(
     (idx: number) => {
@@ -66,7 +62,6 @@ export default function App() {
     [rotate.enabled, rotate.intervalSeconds, pages.length],
   )
 
-  // Auto-rotation
   useEffect(() => {
     if (!rotate.enabled) return
     timerRef.current = setInterval(
@@ -76,71 +71,59 @@ export default function App() {
     return () => { if (timerRef.current !== null) clearInterval(timerRef.current) }
   }, [rotate.enabled, rotate.intervalSeconds, pages.length])
 
-  // ── Native document-level touch listeners ──────────────────────────────────
-  // React synthetic touch events are unreliable on Pi kiosk — use native DOM.
-  // Swipe left → next page, swipe right → prev page, short tap → next page.
-  // Touches inside the header are excluded (header has its own action).
-  useEffect(() => {
-    if (pages.length <= 1) return
+  // ── Pointer-event handlers for <main> ─────────────────────────────────────
+  // ft5x06 DSI touchscreen registers as mouse0, so Chromium fires
+  // pointer events (not touch events). onPointerDown/Up works universally.
 
-    const onStart = (e: TouchEvent) => {
-      const t = e.touches[0]
-      startTouchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() }
-    }
-
-    const onEnd = (e: TouchEvent) => {
-      const start = startTouchRef.current
-      if (!start) return
-      startTouchRef.current = null
-
-      // If touch ended inside the header — let the header handle it
-      if (headerRef.current?.contains(e.target as Node)) return
-
-      const t   = e.changedTouches[0]
-      const dx  = t.clientX - start.x
-      const dy  = t.clientY - start.y
-      const dt  = Date.now() - start.t
-      const adx = Math.abs(dx)
-      const ady = Math.abs(dy)
-      const idx = pageIdxRef.current
-
-      // Swipe: clearly horizontal, far enough, fast enough
-      if (adx > 50 && adx > ady * 1.5 && dt < 600) {
-        goToPage(
-          dx < 0
-            ? (idx + 1) % pages.length                // swipe left  → next
-            : (idx - 1 + pages.length) % pages.length // swipe right → prev
-        )
-        return
-      }
-
-      // Short tap: barely moved, quick
-      if (adx < 30 && ady < 30 && dt < 300) {
-        goToPage((idx + 1) % pages.length)
-      }
-    }
-
-    document.addEventListener('touchstart', onStart, { passive: true })
-    document.addEventListener('touchend',   onEnd,   { passive: true })
-
-    return () => {
-      document.removeEventListener('touchstart', onStart)
-      document.removeEventListener('touchend',   onEnd)
-    }
-  }, [pages.length, goToPage]) // stable deps — no re-registration on page change
-
-  // ── Kiosk exit ────────────────────────────────────────────────────────────
-  const handleExitKiosk = useCallback((e: TouchEvent) => {
-    e.stopPropagation()
-    fetch('/api/kiosk/exit').catch(() => {})
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    pressRef.current = { x: e.clientX, y: e.clientY, t: Date.now() }
   }, [])
 
-  useEffect(() => {
-    const el = headerRef.current
-    if (!el) return
-    el.addEventListener('touchend', handleExitKiosk, { passive: true })
-    return () => el.removeEventListener('touchend', handleExitKiosk)
-  }, [handleExitKiosk])
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const start = pressRef.current
+    pressRef.current = null
+    if (!start || pages.length <= 1) return
+
+    const dx  = e.clientX - start.x
+    const dy  = e.clientY - start.y
+    const dt  = Date.now() - start.t
+    const adx = Math.abs(dx)
+    const ady = Math.abs(dy)
+
+    // Long press → ignore (prevents accidental navigation)
+    if (dt > 500) return
+
+    // Swipe: clearly horizontal, far enough
+    if (adx > 50 && adx > ady * 1.5) {
+      goToPage(
+        dx < 0
+          ? (pageIdx + 1) % pages.length                // swipe left  → next
+          : (pageIdx - 1 + pages.length) % pages.length // swipe right → prev
+      )
+      return
+    }
+
+    // Short tap: didn't move much
+    if (adx < 30 && ady < 30) {
+      goToPage((pageIdx + 1) % pages.length)
+    }
+  }, [pageIdx, pages.length, goToPage])
+
+  const handlePointerCancel = useCallback(() => {
+    pressRef.current = null
+  }, [])
+
+  // ── Header: short tap → exit kiosk ────────────────────────────────────────
+
+  const handleHeaderDown = useCallback(() => {
+    headerRef.current = Date.now()
+  }, [])
+
+  const handleHeaderUp = useCallback(() => {
+    if (Date.now() - headerRef.current < 400) {
+      fetch('/api/kiosk/exit').catch(() => {})
+    }
+  }, [])
 
   const page     = pages[pageIdx]
   const colCount = Math.min(page.slots.length, 3)
@@ -151,10 +134,11 @@ export default function App() {
       onContextMenu={(e) => e.preventDefault()}
     >
 
-      {/* ── Header — touch here to exit kiosk ───────────────────────────── */}
+      {/* ── Header — tap to exit kiosk ──────────────────────────────────── */}
       <header
-        ref={headerRef}
         className="flex items-center justify-between px-5 py-2.5 border-b border-white/[0.05]"
+        onPointerDown={handleHeaderDown}
+        onPointerUp={handleHeaderUp}
       >
         <div className="flex items-center gap-4">
           <div
@@ -169,10 +153,16 @@ export default function App() {
         <ClockWidget />
       </header>
 
-      {/* ── Widget grid ─────────────────────────────────────────────────── */}
+      {/* ── Widget grid — pointer events for swipe/tap navigation ───────── */}
       <main
         className="flex-1 grid gap-3 p-3 min-h-0"
-        style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}
+        style={{
+          gridTemplateColumns: `repeat(${colCount}, 1fr)`,
+          touchAction: 'none', // deliver all pointer events to JS
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
       >
         {page.slots.map((slot) => {
           const Widget  = WIDGET_REGISTRY[slot.widgetId]

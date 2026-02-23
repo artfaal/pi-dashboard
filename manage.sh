@@ -75,8 +75,9 @@ case "$CMD" in
 
   kiosk)
     # Перезапустить Chromium kiosk на Pi
+    # setsid создаёт новую сессию — процесс не получает SIGHUP при отключении SSH
     echo "→ Restarting kiosk on ${PI} ..."
-    _ssh "bash -c '(pkill -f chromium || true; sleep 1; WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 nohup bash ${PI_PATH}/start-kiosk.sh >/tmp/kiosk.log 2>&1) &'"
+    _ssh "pkill -x chromium || true; sleep 2; WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 bash ${PI_PATH}/start-kiosk.sh >>/tmp/kiosk.log 2>&1 &"
     echo "✓ Kiosk restarting (log: /tmp/kiosk.log on Pi)"
     ;;
 
