@@ -20,6 +20,13 @@ CMD="${1:-help}"
 
 _ssh() { ssh "$PI" "$@"; }
 
+# Полное окружение для запуска Chromium из SSH (без него labwc не активирует окно)
+KIOSK_ENV="WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+
+_kiosk_start() {
+  _ssh "pkill -x chromium || true; sleep 2; ${KIOSK_ENV} nohup bash ${PI_PATH}/start-kiosk.sh >>/tmp/kiosk.log 2>&1 &"
+}
+
 _sync() {
   echo "→ Syncing to ${PI}:${PI_PATH} ..."
   rsync -av \
@@ -41,7 +48,7 @@ case "$CMD" in
     echo "→ Building and restarting containers ..."
     _ssh "cd ${PI_PATH} && docker compose up -d --build"
     echo "→ Restarting kiosk ..."
-    _ssh "pkill -x chromium || true; sleep 2; WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 nohup bash ${PI_PATH}/start-kiosk.sh >>/tmp/kiosk.log 2>&1 &"
+    _kiosk_start
     echo "✓ Deploy complete — http://${PI_HOST}:${FRONTEND_PORT:-3000}"
     ;;
 
@@ -82,7 +89,7 @@ case "$CMD" in
   kiosk)
     # Перезапустить Chromium kiosk на Pi
     echo "→ Restarting kiosk on ${PI} ..."
-    _ssh "pkill -x chromium || true; sleep 2; WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 nohup bash ${PI_PATH}/start-kiosk.sh >>/tmp/kiosk.log 2>&1 &"
+    _kiosk_start
     echo "✓ Kiosk restarting (log: /tmp/kiosk.log on Pi)"
     ;;
 
