@@ -154,7 +154,7 @@ async def health():
 @app.get("/api/kiosk/exit")
 async def kiosk_exit():
     """Kill the Chromium kiosk process on the host."""
-    subprocess.Popen(["pkill", "-f", "chromium"])
+    subprocess.Popen(["pkill", "-x", "chromium"])
     return {"ok": True}
 
 
