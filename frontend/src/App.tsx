@@ -59,9 +59,10 @@ export default function App() {
   const [selectedSlotIdx, setSelectedSlotIdx] = useState(0)
   const [expandedSlotIdx, setExpandedSlotIdx] = useState<number | null>(null)
 
-  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
-  const pressRef  = useRef<{ x: number; y: number; t: number } | null>(null)
-  const headerRef = useRef<number>(0)
+  const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pressRef          = useRef<{ x: number; y: number; t: number } | null>(null)
+  const headerRef         = useRef<number>(0)
+  const expandedScrollRef = useRef<HTMLDivElement>(null)
 
   const { rotate, pages } = DASHBOARD_CONFIG
   const isExpanded = expandedSlotIdx !== null
@@ -203,18 +204,26 @@ export default function App() {
           }
           break
 
-        case 'KeyE': // knob left → previous page
+        case 'KeyE': // knob left → прокрутка вверх (если expanded) | предыдущая страница
           e.preventDefault()
-          setExpandedSlotIdx(null)
-          setSelectedSlotIdx(0)
-          setPageIdx((p) => (p - 1 + pages.length) % pages.length)
+          if (isExpanded) {
+            expandedScrollRef.current?.scrollBy({ top: -120, behavior: 'smooth' })
+          } else {
+            setExpandedSlotIdx(null)
+            setSelectedSlotIdx(0)
+            setPageIdx((p) => (p - 1 + pages.length) % pages.length)
+          }
           break
 
-        case 'KeyF': // knob right → next page
+        case 'KeyF': // knob right → прокрутка вниз (если expanded) | следующая страница
           e.preventDefault()
-          setExpandedSlotIdx(null)
-          setSelectedSlotIdx(0)
-          setPageIdx((p) => (p + 1) % pages.length)
+          if (isExpanded) {
+            expandedScrollRef.current?.scrollBy({ top: 120, behavior: 'smooth' })
+          } else {
+            setExpandedSlotIdx(null)
+            setSelectedSlotIdx(0)
+            setPageIdx((p) => (p + 1) % pages.length)
+          }
           break
       }
     }
@@ -242,7 +251,8 @@ export default function App() {
         onPointerCancel={handlePointerCancel}
       >
         <div
-          className="flex-1 card p-5 flex flex-col overflow-hidden"
+          ref={expandedScrollRef}
+          className="flex-1 card p-5 overflow-y-auto"
           style={{ backdropFilter: 'blur(12px)' }}
         >
           <DetailWidget
@@ -281,7 +291,7 @@ export default function App() {
           {/* Breadcrumb when expanded */}
           {isExpanded && (
             <span className="text-[11px] text-slate-600 font-mono">
-              {page.slots[expandedSlotIdx!].widgetId} · D = назад
+              {page.slots[expandedSlotIdx!].widgetId} · E/F = скролл · D = назад
             </span>
           )}
           <ClockWidget />

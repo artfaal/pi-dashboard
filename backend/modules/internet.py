@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import socket
 import time
 
@@ -18,6 +19,26 @@ DEFAULT_TARGETS = [
 DNS_RESOLVE_HOST = "google.com"
 
 
+def _parse_env_targets() -> list[dict] | None:
+    """Parse INTERNET_TARGETS env var.
+
+    Format: "Name;https://url,Name2;https://url2"
+    Returns None if the variable is not set or is empty.
+    """
+    raw = os.environ.get("INTERNET_TARGETS", "").strip()
+    if not raw:
+        return None
+    result = []
+    for item in raw.split(","):
+        item = item.strip()
+        if ";" in item:
+            name, url = item.split(";", 1)
+            name, url = name.strip(), url.strip()
+            if name and url:
+                result.append({"name": name, "url": url})
+    return result or None
+
+
 class InternetModule(BaseModule):
     """Checks internet connectivity by probing HTTP targets and DNS resolution."""
 
@@ -25,7 +46,10 @@ class InternetModule(BaseModule):
     interval = 30
 
     def __init__(self, targets: list[dict] | None = None) -> None:
-        self.targets = targets if targets is not None else DEFAULT_TARGETS
+        # INTERNET_TARGETS env var takes priority over config.yaml targets
+        env_targets = _parse_env_targets()
+        self.targets = env_targets or targets or DEFAULT_TARGETS
+        logger.info("[internet] %d targets configured", len(self.targets))
 
     async def _probe(self, target: dict) -> dict:
         t0 = time.monotonic()

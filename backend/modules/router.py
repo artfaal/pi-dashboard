@@ -57,8 +57,8 @@ class RouterModule(BaseModule):
         self.host = host
         self.user = user
         # SSH private key read from environment as base64 to keep .env clean
-        key_b64 = os.environ.get("ROUTER_SSH_KEY_B64", "")
-        self._key_pem: str | None = base64.b64decode(key_b64).decode() if key_b64 else None
+        key_b64 = os.environ.get("ROUTER_SSH_KEY_B64", "").strip()
+        self._key_pem: str | None = base64.b64decode(key_b64).decode().strip() if key_b64 else None
 
     # ── helpers ────────────────────────────────────────────────────────────────
 
@@ -93,6 +93,7 @@ class RouterModule(BaseModule):
             client_keys=[key],
             known_hosts=None,
             connect_timeout=10,
+            preferred_auth=['publickey'],
         ) as conn:
             wan_json, uptime_raw, clients_raw, (rx_bps, tx_bps) = await asyncio.gather(
                 self._run(conn, "ubus call network.interface.wan status 2>/dev/null"),

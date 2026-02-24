@@ -50,7 +50,7 @@ function ProxyCard({ entry }: { entry: ProxyEntry }) {
         </span>
       </div>
 
-      {/* Protocol badge + exit IP */}
+      {/* Protocol badge row */}
       <div className="flex items-center gap-2">
         <span className="text-[9px] text-slate-600 px-1.5 py-0.5 bg-white/[0.05] rounded font-mono">
           {label}
@@ -58,22 +58,26 @@ function ProxyCard({ entry }: { entry: ProxyEntry }) {
         {note && (
           <span className="text-[9px] text-slate-600 italic">{note}</span>
         )}
-        {isFull && entry.ok && entry.exit_ip && (
-          <span className="text-[10px] font-mono text-slate-400 ml-auto truncate">
-            {entry.exit_ip}
-          </span>
-        )}
-        {isFull && entry.ok && entry.exit_isp && (
-          <span className="text-[9px] text-slate-600 truncate max-w-[100px]" title={entry.exit_isp}>
-            {entry.exit_isp.length > 18 ? entry.exit_isp.slice(0, 18) + '…' : entry.exit_isp}
-          </span>
-        )}
         {!entry.ok && entry.error && (
-          <span className="text-[9px] text-red-500/70 truncate ml-auto max-w-[160px]" title={entry.error}>
-            {entry.error.length > 30 ? entry.error.slice(0, 30) + '…' : entry.error}
+          <span className="text-[9px] text-red-500/70 truncate ml-auto max-w-[200px]" title={entry.error}>
+            {entry.error.length > 35 ? entry.error.slice(0, 35) + '…' : entry.error}
           </span>
         )}
       </div>
+
+      {/* Exit IP + ISP на отдельной строке */}
+      {isFull && entry.ok && (entry.exit_ip || entry.exit_isp) && (
+        <div className="flex items-center gap-3 text-[9px] mt-0.5 min-w-0">
+          {entry.exit_ip && (
+            <span className="font-mono text-slate-400 shrink-0">{entry.exit_ip}</span>
+          )}
+          {entry.exit_isp && (
+            <span className="text-slate-500 truncate" title={entry.exit_isp}>
+              {entry.exit_isp}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -99,7 +103,7 @@ export function ProxyDetailWidget({ data, error }: WidgetProps) {
     : null
 
   return (
-    <div className="flex flex-col h-full gap-3 animate-fadeIn">
+    <div className="flex flex-col gap-3 animate-fadeIn">
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -124,7 +128,7 @@ export function ProxyDetailWidget({ data, error }: WidgetProps) {
       </div>
 
       {/* Proxy cards */}
-      <div className="flex flex-col gap-2 flex-1 overflow-hidden">
+      <div className="flex flex-col gap-2">
         {pd.proxies.map((p) => <ProxyCard key={p.name} entry={p} />)}
       </div>
 
