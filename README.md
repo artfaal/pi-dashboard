@@ -38,8 +38,9 @@
 │  │   │    co2.py           │   │  /ws      → :8000 │  │  │
 │  │   │    internet.py      │   │  /api/    → :8000 │  │  │
 │  │   │    plants.py        │   └────────────────────┘  │  │
+│  │   │    router.py        │                            │  │
+│  │   │    proxy.py         │                            │  │
 │  │   │    weather.py       │                            │  │
-│  │   │    <new_module>.py  │                            │  │
 │  │   │                     │                            │  │
 │  │   │  WebSocket /ws      │                            │  │
 │  │   └─────────────────────┘                            │  │
@@ -60,7 +61,7 @@
 **Поток данных:**
 
 ```
-Внешние источники (co2mond, Open-Meteo, URLs)
+Внешние источники (co2mond, Open-Meteo, URLs, SSH, прокси)
         │
         ▼
   Модули backend (collect() каждые N сек)
@@ -95,8 +96,10 @@ pi-dashboard/
 │   └── modules/
 │       ├── base.py             # BaseModule — абстрактный класс
 │       ├── co2.py              # CO2 + температура (co2mond Prometheus)
-│       ├── internet.py         # Ping интернет-таргетов
+│       ├── internet.py         # Пинг HTTP-таргетов + DNS resolve
 │       ├── plants.py           # Датчики влажности растений (Pushgateway)
+│       ├── proxy.py            # Проверка прокси: Xray/SOCKS5/HTTP/HTTPS/SS/Trojan
+│       ├── router.py           # Статистика роутера (OpenWrt SSH)
 │       └── weather.py          # Погода (Open-Meteo API)
 │
 ├── frontend/
@@ -104,19 +107,24 @@ pi-dashboard/
 │   ├── nginx.conf
 │   ├── package.json
 │   └── src/
-│       ├── App.tsx             # Корневой компонент: страницы, навигация тапом
+│       ├── App.tsx             # Корневой компонент: страницы, навигация, клавиатура
 │       ├── dashboard.config.ts # Страницы и слоты виджетов
 │       ├── vite-env.d.ts       # Типы для import.meta.env (VITE_* переменные)
 │       ├── types/index.ts      # TypeScript-типы данных модулей
 │       ├── hooks/
 │       │   └── useWebSocket.ts # WS-клиент с авто-реконнектом
 │       └── widgets/
-│           ├── registry.ts     # РЕЕСТР: widget_id → React-компонент
+│           ├── registry.ts           # РЕЕСТР: widget_id → React-компонент
 │           ├── ClockWidget.tsx
 │           ├── CO2Widget.tsx
 │           ├── InternetWidget.tsx
+│           ├── InternetDetailWidget.tsx
 │           ├── PlantsWidget.tsx
+│           ├── ProxyWidget.tsx
+│           ├── ProxyDetailWidget.tsx
+│           ├── RouterWidget.tsx
 │           ├── WeatherWidget.tsx
+│           ├── WeatherDetailWidget.tsx
 │           └── TempRoomWidget.tsx
 │
 └── start-kiosk.sh              # Запуск Chromium kiosk (ждёт :3000)
@@ -130,7 +138,8 @@ pi-dashboard/
 |------|-----|-------|
 | **Backend** | Python + FastAPI | Async, WebSocket из коробки |
 | **Transport** | WebSocket | Сервер пушит данные — нет polling |
-| **HTTP-клиент** | httpx | Async HTTP для модулей |
+| **HTTP-клиент** | httpx + socksio | Async HTTP, поддержка SOCKS5/HTTP прокси |
+| **SSH-клиент** | asyncssh | Async SSH к роутеру (OpenWrt) |
 | **Frontend** | React + Vite + TypeScript | Компонент = виджет |
 | **Стили** | TailwindCSS | Быстро, без кастомного CSS |
 | **Proxy** | nginx | Один порт наружу, WS proxy |
@@ -156,14 +165,13 @@ pi-dashboard/
 | ID | Файл | Источник данных | Поля |
 |----|------|----------------|------|
 | `co2` | `co2.py` | co2mond `:9999/metrics` | `ppm`, `temp` |
-| `internet` | `internet.py` | HTTP GET к таргетам | `online`, `targets[]` |
+| `internet` | `internet.py` | HTTP GET к таргетам + DNS | `online`, `targets[]` (name, ok, ms), `dns_ok`, `dns_ms` |
 | `plants` | `plants.py` | Pushgateway `/api/v1/metrics` | `plants[]` (name, humidity, humidity_min, humidity_max, temp, battery, image_url) |
-
-**Картинки растений** (`/api/plants/image/{name}`) проксируются бэкендом через SOCKS5 и кэшируются на диск в `/tmp/plant_images/` внутри контейнера. При повторных запросах отдаются с диска без обращения к `img.artfaal.ru`. Кэш сбрасывается только при пересоздании контейнера (`docker compose up --build`).
 | `weather` | `weather.py` | Open-Meteo API | `temp`, `feels_like`, `humidity`, `wind_speed`, `wind_dir`, `wind_gusts`, `pressure` (гПа), `precipitation`, `uv_index`, `condition`, `description`, `is_day`, `temp_max`, `temp_min`, `precip_today`, `sunrise`, `sunset` |
 | `router` | `router.py` | SSH → OpenWrt (192.168.2.1) | `wan_ip`, `uptime_secs`, `dhcp_clients`, `wan_rx_bps`, `wan_tx_bps` |
-| `internet` | `internet.py` | HTTP + DNS resolve | `online`, `targets[]` (name, ok, ms), `dns_ok`, `dns_ms` |
 | `proxy` | `proxy.py` | HTTP/SOCKS/TLS тесты с Pi | `ok`, `proxies[]` (name, type, ok, ms, exit_ip, exit_isp, error) |
+
+**Картинки растений** (`/api/plants/image/{name}`) проксируются бэкендом через SOCKS5 и кэшируются на диск в `/tmp/plant_images/` внутри контейнера. При повторных запросах отдаются с диска без обращения к `img.artfaal.ru`. Кэш сбрасывается только при пересоздании контейнера.
 
 ---
 
@@ -178,14 +186,17 @@ export const DASHBOARD_CONFIG = {
   pages: [
     { id: 'home', label: 'Главная', slots: [
       { widgetId: 'co2',      moduleId: 'co2'      },
-      { widgetId: 'weather',  moduleId: 'weather'  },
-      { widgetId: 'internet', moduleId: 'internet' },
+      { widgetId: 'weather',  moduleId: 'weather',  detailWidgetId: 'weather_detail'  },
+      { widgetId: 'internet', moduleId: 'internet', detailWidgetId: 'internet_detail' },
+    ]},
+    { id: 'network', label: 'Сеть', slots: [
+      { widgetId: 'router', moduleId: 'router' },
+      { widgetId: 'proxy',  moduleId: 'proxy',  detailWidgetId: 'proxy_detail' },
     ]},
     { id: 'plants', label: 'Растения', slots: [
       { widgetId: 'plants', moduleId: 'plants' },
     ]},
   ],
-  // Значения берутся из .env через VITE_ROTATE_ENABLED / VITE_ROTATE_INTERVAL
   rotate: { enabled: ..., intervalSeconds: ... },
 }
 ```
@@ -205,40 +216,33 @@ export const DASHBOARD_CONFIG = {
 Физическое устройство: мини-механическая клавиатура с 3 кнопками и поворотным энкодером.
 Запрограммирована через Windows-ПО производителя на отправку букв `a–f`.
 
-| Физическая кнопка | Посылает | `e.code` в JS | Действие |
-|-------------------|----------|---------------|---------|
-| Button A          | `a`      | `KeyA`        | Выбрать виджет левее (циклично) |
-| Button B          | `b`      | `KeyB`        | Войти в виджет / выйти обратно |
-| Button C          | `c`      | `KeyC`        | Выбрать виджет правее (циклично) |
-| Knob нажатие      | `d`      | `KeyD`        | Выйти из виджета ИЛИ выйти из kiosk |
-| Knob влево        | `e`      | `KeyE`        | Предыдущая страница |
-| Knob вправо       | `f`      | `KeyF`        | Следующая страница |
+| Физическая кнопка | Посылает | `e.code` | Режим страницы | Режим детального вида |
+|-------------------|----------|----------|---------------|----------------------|
+| Button A          | `a`      | `KeyA`   | Выбрать виджет левее (циклично) | — |
+| Button B          | `b`      | `KeyB`   | Войти в виджет | Выйти назад |
+| Button C          | `c`      | `KeyC`   | Выбрать виджет правее (циклично) | — |
+| Knob нажатие      | `d`      | `KeyD`   | Выйти из kiosk | Выйти назад |
+| Knob влево        | `e`      | `KeyE`   | Предыдущая страница | Прокрутить вверх |
+| Knob вправо       | `f`      | `KeyF`   | Следующая страница | Прокрутить вниз |
+
+> Используется `e.code` (физическая позиция клавиши), а не `e.key` — язык раскладки на Pi не влияет.
 
 ### Выбор и раскрытие виджетов
 
 Виджеты на странице можно выбирать клавишами A/C — выбранный подсвечивается indigo-рамкой. Нажатие B (или тап по виджету) разворачивает его на весь экран, показывая детальный вид (`detailWidgetId`). Выйти — клавишей B или D, а также тапом по экрану.
 
+В развёрнутом виджете **энкодер прокручивает содержимое** (↑/↓ по 120px). Это полезно когда контент не вмещается на экран (например, список из 6+ прокси).
+
 ```
-[Главная страница]               [Детальный вид — weather_detail]
+[Главная страница]               [Детальный вид — proxy_detail]
 ┌──────┬──────┬──────┐           ┌─────────────────────────────┐
-│  CO₂ │[Пог.]│ Inet │  ──B──►  │   Погода · подробно         │
-│      │[====]│      │           │   +3° / ощущ. +1°           │
-└──────┴──────┴──────┘           │   Ветер, давление, УФ, ...  │
-   A ◄──── выбор ────► C         └─────────────────────────────┘
-                                         D / B = назад
+│Router│[Prox]│      │  ──B──►  │   Proxy / VPN · подробно    │  ▲
+│      │[====]│      │           │   ● Xray      SOCKS5  300ms │  │ Knob↑
+└──────┴──────┴──────┘           │   ● SOCKS5    ...           │  │
+   A ◄──── выбор ────► C         │   ● HTTP      ...           │  ▼ Knob↓
+                                 └─────────────────────────────┘
+                                       E/F = скролл · D = назад
 ```
-
-Состояния клавиш в зависимости от режима:
-
-| Клавиша | Режим страницы | Режим детального вида |
-|---------|---------------|----------------------|
-| A       | Выбрать влево | — (нет действия) |
-| B       | Войти в виджет | Выйти назад |
-| C       | Выбрать вправо | — (нет действия) |
-| D       | Выйти из kiosk | Выйти назад |
-| E / F   | Смена страницы | Смена страницы + выход |
-
-> Используется `e.code` (физическая позиция клавиши), а не `e.key` (символ) — поэтому язык раскладки на Pi не влияет на работу клавиатуры.
 
 ### Как добавить детальный вид для виджета
 
@@ -250,11 +254,9 @@ export const DASHBOARD_CONFIG = {
 { widgetId: 'my_widget', moduleId: 'my_module', detailWidgetId: 'my_detail' }
 ```
 
-Если `detailWidgetId` не задан — при раскрытии показывается тот же виджет, только полноэкранно.
+Если `detailWidgetId` не задан — при раскрытии показывается тот же виджет полноэкранно.
 
-### Реестр виджетов
-
-`widgets/registry.ts` связывает `widgetId` → React-компонент.
+Детальный виджет **не должен** использовать `h-full` на корневом элементе, если его контент может не влезть на экран — тогда родительский контейнер с `overflow-y-auto` включит скролл.
 
 ### Доступные виджеты
 
@@ -262,13 +264,13 @@ export const DASHBOARD_CONFIG = {
 |------------|-----------|----------------------|----------------|
 | `co2` | `CO2Widget` | `co2` | Круговой gauge CO₂, sparkline, уровень |
 | `internet` | `InternetWidget` | `internet` | Online/Offline, пинги с latency-баром, DNS статус |
-| `internet_detail` | `InternetDetailWidget` | `internet` | Подробно: все цели с барами, DNS резолв, статистика |
-| `plants` | `PlantsWidget` | `plants` | N карточек на экран (`VITE_PLANTS_PER_PAGE`), фото, бар влажности min–max, статус ↓/✓/↑, температура, боковая пагинация |
-| `proxy` | `ProxyWidget` | `proxy` | Цветные точки по каждому из 6 прокси (Xray, SOCKS5, HTTP, HTTPS, SS, Trojan), latency |
-| `proxy_detail` | `ProxyDetailWidget` | `proxy` | Карточки: протокол, latency, exit IP, ISP, ошибка |
+| `internet_detail` | `InternetDetailWidget` | `internet` | Все цели с барами, DNS резолв, статистика |
+| `plants` | `PlantsWidget` | `plants` | Карточки растений, фото, бар влажности, боковая пагинация |
+| `proxy` | `ProxyWidget` | `proxy` | Цветные точки по 6 прокси (Xray, SOCKS5, HTTP, HTTPS, SS, Trojan) с latency |
+| `proxy_detail` | `ProxyDetailWidget` | `proxy` | Карточки: протокол, latency, exit IP + ISP (или ошибка) |
 | `router` | `RouterWidget` | `router` | WAN IP, аптайм, кол-во DHCP-клиентов, скорость WAN ↓/↑ |
 | `weather` | `WeatherWidget` | `weather` | Температура, ощущается, влажность, ветер, диапазон дня |
-| `weather_detail` | `WeatherDetailWidget` | `weather` | Подробный вид: ветер+порывы, давление, УФ-индекс, осадки за день, восход/закат, бар диапазона дня |
+| `weather_detail` | `WeatherDetailWidget` | `weather` | Ветер+порывы, давление, УФ-индекс, осадки, восход/закат, бар диапазона |
 | `temp_room` | `TempRoomWidget` | `co2` | Температура в помещении, comfort range |
 | *(header)* | `ClockWidget` | *(local)* | Часы HH:MM:SS + дата |
 
@@ -326,6 +328,21 @@ WEATHER_INTERVAL=600
 
 # ── Интернет ──────────────────────────────────────────────────────────────────
 INTERNET_INTERVAL=30
+# Список сайтов для проверки. Формат: "Имя;https://url,Имя2;https://url2"
+# Если не задано — используются дефолтные (Google DNS, Yandex DNS, Яндекс)
+INTERNET_TARGETS="Google DNS;https://8.8.8.8,Cloudflare;https://1.1.1.1,Яндекс;https://ya.ru"
+
+# ── Роутер (OpenWrt SSH) ───────────────────────────────────────────────────────
+ROUTER_HOST=192.168.2.1
+ROUTER_USER=root
+ROUTER_INTERVAL=60
+ROUTER_SSH_KEY_B64=<base64-encoded-private-key>  # см. раздел ниже
+
+# ── Proxy / VPN health checks ─────────────────────────────────────────────────
+PROXY_VEGA_HOST=vega.example.com
+PROXY_VEGA_USER=user
+PROXY_VEGA_PASS=<password>
+PROXY_INTERVAL=120
 
 # ── Растения — бэкенд ─────────────────────────────────────────────────────────
 PLANTS_PUSHGATEWAY_URL=https://pushgateway.example.com
@@ -336,18 +353,6 @@ PLANTS_PROXY_HOST=              # SOCKS5 прокси (опционально)
 PLANTS_PROXY_PORT=1080
 PLANTS_PROXY_USER=
 PLANTS_PROXY_PASSWORD=
-
-# ── Роутер (OpenWrt SSH) ───────────────────────────────────────────────────────
-ROUTER_HOST=192.168.2.1
-ROUTER_USER=root
-ROUTER_INTERVAL=60
-ROUTER_SSH_KEY_B64=<base64-encoded-private-key>
-
-# ── Proxy / VPN health checks ─────────────────────────────────────────────────
-PROXY_VEGA_HOST=vega.artfaal.ru
-PROXY_VEGA_USER=artfaal
-PROXY_VEGA_PASS=<password>
-PROXY_INTERVAL=120
 ```
 
 ### Настройка SSH-ключа для роутера
@@ -360,8 +365,12 @@ ssh-keygen -t ed25519 -f /tmp/pi_dashboard_key -C "pi-dashboard@backend" -N ""
 ```
 
 **2. Добавить публичный ключ на роутер:**
+
+> ⚠️ На **OpenWrt** dropbear читает `/etc/dropbear/authorized_keys`, а **не** `/root/.ssh/authorized_keys`.
+
 ```bash
-cat /tmp/pi_dashboard_key.pub | ssh root@192.168.2.1 "cat >> /root/.ssh/authorized_keys"
+cat /tmp/pi_dashboard_key.pub | ssh root@192.168.2.1 \
+  "cat >> /etc/dropbear/authorized_keys"
 ```
 
 **3. Закодировать приватный ключ в base64 и добавить в `.env`:**
@@ -373,9 +382,7 @@ base64 -w 0 /tmp/pi_dashboard_key
 ```
 Результат вставить в `ROUTER_SSH_KEY_B64=...` в `.env`.
 
-> Ключ хранится в `.env` (gitignored) и читается бэкендом из переменной окружения контейнера.
-
-`backend/config.yaml` использует `${VAR}` — подстановка через `os.path.expandvars()` в `main.py`.
+> Ключ хранится в `.env` (gitignored) и читается бэкендом из переменной окружения контейнера. В памяти декодируется через `base64.b64decode()` — файл на диск не пишется.
 
 ---
 
@@ -402,6 +409,8 @@ base64 -w 0 /tmp/pi_dashboard_key
 > `.env` при `deploy` и `sync` всегда принудительно перезаписывается на Pi (`--ignore-times`), даже если удалённый файл новее.
 >
 > Изменение `VITE_*` переменных вступает в силу только после `deploy` (требуется пересборка фронтенда).
+>
+> `.env` загружается через `source` (не `xargs`), поэтому значения с пробелами и спецсимволами корректно обрабатываются при наличии кавычек.
 
 ---
 
@@ -554,6 +563,11 @@ export const WIDGET_REGISTRY = {
 ssh artfaal@192.168.2.215 "pkill -x chromium; mv ~/.config/chromium ~/.config/chromium.bak"
 ./manage.sh kiosk
 ```
+
+### OpenWrt: authorized_keys в /etc/dropbear/, не в /root/.ssh/
+
+На OpenWrt dropbear по умолчанию читает ключи из `/etc/dropbear/authorized_keys`.
+Стандартный путь `/root/.ssh/authorized_keys` игнорируется.
 
 ### DBUS_SESSION_BUS_ADDRESS при запуске из SSH
 
