@@ -17,8 +17,16 @@ export const DASHBOARD_CONFIG = {
       label: 'Главная',
       slots: [
         { widgetId: 'co2',      moduleId: 'co2'      },
-        { widgetId: 'weather',  moduleId: 'weather',  detailWidgetId: 'weather_detail' },
-        { widgetId: 'internet', moduleId: 'internet' },
+        { widgetId: 'weather',  moduleId: 'weather',  detailWidgetId: 'weather_detail'  },
+        { widgetId: 'internet', moduleId: 'internet', detailWidgetId: 'internet_detail' },
+      ],
+    },
+    {
+      id: 'network',
+      label: 'Сеть',
+      slots: [
+        { widgetId: 'router', moduleId: 'router' },
+        { widgetId: 'proxy',  moduleId: 'proxy',  detailWidgetId: 'proxy_detail' },
       ],
     },
     {

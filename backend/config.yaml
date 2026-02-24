@@ -44,3 +44,23 @@ modules:
       longitude: ${WEATHER_LON}
       timezone: "${WEATHER_TZ}"
       location_name: "${WEATHER_LOCATION}"
+
+  # ── Router stats via SSH (OpenWrt) ─────────────────────────────────────
+  # ROUTER_SSH_KEY_B64 — приватный SSH-ключ в base64, читается из env
+  - id: router
+    enabled: true
+    interval: ${ROUTER_INTERVAL}
+    config:
+      host: "${ROUTER_HOST}"
+      user: "${ROUTER_USER}"
+
+  # ── Proxy / VPN health checks ───────────────────────────────────────────
+  - id: proxy
+    enabled: true
+    interval: ${PROXY_INTERVAL}
+    config:
+      router_host: "${ROUTER_HOST}"
+      router_port: 1080
+      vega_host:   "${PROXY_VEGA_HOST}"
+      vega_user:   "${PROXY_VEGA_USER}"
+      vega_pass:   "${PROXY_VEGA_PASS}"

@@ -16,11 +16,6 @@ export interface InternetTarget {
   ms: number | null
 }
 
-export interface InternetData {
-  online: boolean
-  targets: InternetTarget[]
-}
-
 export interface WeatherData {
   location: string
   temp: number
@@ -56,6 +51,36 @@ export interface PlantData {
 export interface PlantsData {
   plants: PlantData[]
   count: number
+}
+
+export interface RouterData {
+  wan_ip:       string
+  uptime_secs:  number
+  dhcp_clients: number
+  wan_rx_bps:   number
+  wan_tx_bps:   number
+}
+
+export interface ProxyEntry {
+  name:      string
+  type:      string   // 'socks5' | 'http' | 'https' | 'ss' | 'trojan'
+  ok:        boolean
+  ms:        number | null
+  exit_ip?:  string
+  exit_isp?: string
+  error?:    string
+}
+
+export interface ProxyData {
+  ok:      boolean
+  proxies: ProxyEntry[]
+}
+
+export interface InternetData {
+  online:   boolean
+  targets:  InternetTarget[]
+  dns_ok:   boolean
+  dns_ms:   number | null
 }
 
 // Standard props interface for all widgets

@@ -17,6 +17,8 @@ from fastapi.responses import Response
 from modules.co2 import CO2Module
 from modules.internet import InternetModule
 from modules.plants import PlantsModule
+from modules.proxy import ProxyModule
+from modules.router import RouterModule
 from modules.weather import WeatherModule
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
@@ -31,10 +33,12 @@ logger = logging.getLogger("dashboard")
 # To add a new module: import its class here and add it to this dict.
 
 MODULE_REGISTRY = {
-    "co2": CO2Module,
+    "co2":      CO2Module,
     "internet": InternetModule,
-    "plants": PlantsModule,
-    "weather": WeatherModule,
+    "plants":   PlantsModule,
+    "proxy":    ProxyModule,
+    "router":   RouterModule,
+    "weather":  WeatherModule,
 }
 
 # ─── WebSocket connection manager ─────────────────────────────────────────────

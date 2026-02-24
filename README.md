@@ -161,6 +161,9 @@ pi-dashboard/
 
 **Картинки растений** (`/api/plants/image/{name}`) проксируются бэкендом через SOCKS5 и кэшируются на диск в `/tmp/plant_images/` внутри контейнера. При повторных запросах отдаются с диска без обращения к `img.artfaal.ru`. Кэш сбрасывается только при пересоздании контейнера (`docker compose up --build`).
 | `weather` | `weather.py` | Open-Meteo API | `temp`, `feels_like`, `humidity`, `wind_speed`, `wind_dir`, `wind_gusts`, `pressure` (гПа), `precipitation`, `uv_index`, `condition`, `description`, `is_day`, `temp_max`, `temp_min`, `precip_today`, `sunrise`, `sunset` |
+| `router` | `router.py` | SSH → OpenWrt (192.168.2.1) | `wan_ip`, `uptime_secs`, `dhcp_clients`, `wan_rx_bps`, `wan_tx_bps` |
+| `internet` | `internet.py` | HTTP + DNS resolve | `online`, `targets[]` (name, ok, ms), `dns_ok`, `dns_ms` |
+| `proxy` | `proxy.py` | HTTP/SOCKS/TLS тесты с Pi | `ok`, `proxies[]` (name, type, ok, ms, exit_ip, exit_isp, error) |
 
 ---
 
@@ -258,8 +261,12 @@ export const DASHBOARD_CONFIG = {
 | `widgetId` | Компонент | Источник (`moduleId`) | Что показывает |
 |------------|-----------|----------------------|----------------|
 | `co2` | `CO2Widget` | `co2` | Круговой gauge CO₂, sparkline, уровень |
-| `internet` | `InternetWidget` | `internet` | Online/Offline, список таргетов с latency |
+| `internet` | `InternetWidget` | `internet` | Online/Offline, пинги с latency-баром, DNS статус |
+| `internet_detail` | `InternetDetailWidget` | `internet` | Подробно: все цели с барами, DNS резолв, статистика |
 | `plants` | `PlantsWidget` | `plants` | N карточек на экран (`VITE_PLANTS_PER_PAGE`), фото, бар влажности min–max, статус ↓/✓/↑, температура, боковая пагинация |
+| `proxy` | `ProxyWidget` | `proxy` | Цветные точки по каждому из 6 прокси (Xray, SOCKS5, HTTP, HTTPS, SS, Trojan), latency |
+| `proxy_detail` | `ProxyDetailWidget` | `proxy` | Карточки: протокол, latency, exit IP, ISP, ошибка |
+| `router` | `RouterWidget` | `router` | WAN IP, аптайм, кол-во DHCP-клиентов, скорость WAN ↓/↑ |
 | `weather` | `WeatherWidget` | `weather` | Температура, ощущается, влажность, ветер, диапазон дня |
 | `weather_detail` | `WeatherDetailWidget` | `weather` | Подробный вид: ветер+порывы, давление, УФ-индекс, осадки за день, восход/закат, бар диапазона дня |
 | `temp_room` | `TempRoomWidget` | `co2` | Температура в помещении, comfort range |
@@ -278,7 +285,7 @@ export const DASHBOARD_CONFIG = {
 - `VITE_*` — передаются как Docker build args и **встраиваются Vite при сборке** фронтенда; изменение требует rebuild (`./manage.sh deploy`)
 
 ```env
-# ── Pi connection (используется manage.sh) ────────────────────────────────────
+# ── Pi connection (используется manage.sh) ──────────────────────────────────
 PI_HOST=192.168.2.215
 PI_USER=artfaal
 PI_PATH=/home/artfaal/pi-dashboard
@@ -329,7 +336,44 @@ PLANTS_PROXY_HOST=              # SOCKS5 прокси (опционально)
 PLANTS_PROXY_PORT=1080
 PLANTS_PROXY_USER=
 PLANTS_PROXY_PASSWORD=
+
+# ── Роутер (OpenWrt SSH) ───────────────────────────────────────────────────────
+ROUTER_HOST=192.168.2.1
+ROUTER_USER=root
+ROUTER_INTERVAL=60
+ROUTER_SSH_KEY_B64=<base64-encoded-private-key>
+
+# ── Proxy / VPN health checks ─────────────────────────────────────────────────
+PROXY_VEGA_HOST=vega.artfaal.ru
+PROXY_VEGA_USER=artfaal
+PROXY_VEGA_PASS=<password>
+PROXY_INTERVAL=120
 ```
+
+### Настройка SSH-ключа для роутера
+
+Бэкенд (Docker-контейнер на Pi) подключается к роутеру по SSH для получения WAN IP, аптайма, DHCP-клиентов и скорости WAN.
+
+**1. Сгенерировать ключ:**
+```bash
+ssh-keygen -t ed25519 -f /tmp/pi_dashboard_key -C "pi-dashboard@backend" -N ""
+```
+
+**2. Добавить публичный ключ на роутер:**
+```bash
+cat /tmp/pi_dashboard_key.pub | ssh root@192.168.2.1 "cat >> /root/.ssh/authorized_keys"
+```
+
+**3. Закодировать приватный ключ в base64 и добавить в `.env`:**
+```bash
+# macOS
+base64 -i /tmp/pi_dashboard_key | tr -d '\n'
+# Linux
+base64 -w 0 /tmp/pi_dashboard_key
+```
+Результат вставить в `ROUTER_SSH_KEY_B64=...` в `.env`.
+
+> Ключ хранится в `.env` (gitignored) и читается бэкендом из переменной окружения контейнера.
 
 `backend/config.yaml` использует `${VAR}` — подстановка через `os.path.expandvars()` в `main.py`.
 
