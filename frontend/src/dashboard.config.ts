@@ -1,6 +1,7 @@
 export interface WidgetSlotConfig {
   widgetId: string
   moduleId: string
+  detailWidgetId?: string
 }
 
 export interface PageConfig {
@@ -16,7 +17,7 @@ export const DASHBOARD_CONFIG = {
       label: 'Главная',
       slots: [
         { widgetId: 'co2',      moduleId: 'co2'      },
-        { widgetId: 'weather',  moduleId: 'weather'  },
+        { widgetId: 'weather',  moduleId: 'weather',  detailWidgetId: 'weather_detail' },
         { widgetId: 'internet', moduleId: 'internet' },
       ],
     },

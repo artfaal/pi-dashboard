@@ -26,11 +26,25 @@ function ConnectionDot({ connected }: { connected: boolean }) {
 
 // ── Widget card wrapper ────────────────────────────────────────────────────────
 
-function WidgetCard({ children }: { children: React.ReactNode }) {
+function WidgetCard({
+  children,
+  selected,
+  onClick,
+}: {
+  children: React.ReactNode
+  selected?: boolean
+  onClick?: () => void
+}) {
   return (
     <div
-      className="card p-5 flex flex-col overflow-hidden"
+      className={[
+        'card p-5 flex flex-col overflow-hidden transition-all duration-150',
+        selected
+          ? 'ring-2 ring-indigo-500/80 shadow-[0_0_16px_2px_rgba(99,102,241,0.25)]'
+          : '',
+      ].join(' ')}
       style={{ backdropFilter: 'blur(12px)' }}
+      onClick={onClick}
     >
       {children}
     </div>
@@ -41,16 +55,23 @@ function WidgetCard({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { connected, data: wsData } = useWebSocket(WS_URL)
-  const [pageIdx, setPageIdx] = useState(0)
+  const [pageIdx, setPageIdx]               = useState(0)
+  const [selectedSlotIdx, setSelectedSlotIdx] = useState(0)
+  const [expandedSlotIdx, setExpandedSlotIdx] = useState<number | null>(null)
+
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
   const pressRef  = useRef<{ x: number; y: number; t: number } | null>(null)
-  const headerRef = useRef<number>(0) // stores pointerdown time for header
+  const headerRef = useRef<number>(0)
 
   const { rotate, pages } = DASHBOARD_CONFIG
+  const isExpanded = expandedSlotIdx !== null
 
+  // Reset widget selection/expansion when page changes
   const goToPage = useCallback(
     (idx: number) => {
       setPageIdx(idx)
+      setSelectedSlotIdx(0)
+      setExpandedSlotIdx(null)
       if (rotate.enabled && timerRef.current !== null) {
         clearInterval(timerRef.current)
         timerRef.current = setInterval(
@@ -72,8 +93,6 @@ export default function App() {
   }, [rotate.enabled, rotate.intervalSeconds, pages.length])
 
   // ── Pointer-event handlers for <main> ─────────────────────────────────────
-  // ft5x06 DSI touchscreen registers as mouse0, so Chromium fires
-  // pointer events (not touch events). onPointerDown/Up works universally.
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     pressRef.current = { x: e.clientX, y: e.clientY, t: Date.now() }
@@ -82,7 +101,7 @@ export default function App() {
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     const start = pressRef.current
     pressRef.current = null
-    if (!start || pages.length <= 1) return
+    if (!start) return
 
     const dx  = e.clientX - start.x
     const dy  = e.clientY - start.y
@@ -90,24 +109,32 @@ export default function App() {
     const adx = Math.abs(dx)
     const ady = Math.abs(dy)
 
-    // Long press → ignore (prevents accidental navigation)
+    // Long press → ignore
     if (dt > 500) return
+
+    // When expanded: any tap/swipe exits the expanded widget
+    if (isExpanded) {
+      setExpandedSlotIdx(null)
+      return
+    }
+
+    if (pages.length <= 1) return
 
     // Swipe: clearly horizontal, far enough
     if (adx > 50 && adx > ady * 1.5) {
       goToPage(
         dx < 0
-          ? (pageIdx + 1) % pages.length                // swipe left  → next
-          : (pageIdx - 1 + pages.length) % pages.length // swipe right → prev
+          ? (pageIdx + 1) % pages.length
+          : (pageIdx - 1 + pages.length) % pages.length,
       )
       return
     }
 
-    // Short tap: didn't move much
+    // Short tap: navigate pages
     if (adx < 30 && ady < 30) {
       goToPage((pageIdx + 1) % pages.length)
     }
-  }, [pageIdx, pages.length, goToPage])
+  }, [pageIdx, pages.length, goToPage, isExpanded])
 
   const handlePointerCancel = useCallback(() => {
     pressRef.current = null
@@ -126,48 +153,106 @@ export default function App() {
   }, [])
 
   // ── Macro keyboard (3 buttons + rotary encoder) ───────────────────────────
-  // Physical key mapping (programmed via keyboard's Windows software):
+  // Physical key mapping:
   //   Button A → KeyA    Button B → KeyB    Button C → KeyC
   //   Knob press → KeyD  Knob left → KeyE   Knob right → KeyF
   //
-  // To change what a button does — edit the cases below.
-  // Use e.code (physical position) so layout language doesn't matter.
+  // Widget selection/expansion mode:
+  //   A — select widget to the LEFT (cyclic)
+  //   B — enter selected widget / exit expanded back to page
+  //   C — select widget to the RIGHT (cyclic)
+  //   D — exit expanded widget OR exit kiosk (if at page level)
+  //   E — previous page (exits expanded if any)
+  //   F — next page (exits expanded if any)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const page   = pages[pageIdx]
+      const slots  = page?.slots ?? []
+      const nSlots = slots.length
+
       switch (e.code) {
+        case 'KeyA': // button A → select widget to the left
+          e.preventDefault()
+          if (!isExpanded && nSlots > 1) {
+            setSelectedSlotIdx((i) => (i - 1 + nSlots) % nSlots)
+          }
+          break
+
+        case 'KeyB': // button B → enter / exit
+          e.preventDefault()
+          if (isExpanded) {
+            setExpandedSlotIdx(null)
+          } else {
+            setExpandedSlotIdx(selectedSlotIdx)
+          }
+          break
+
+        case 'KeyC': // button C → select widget to the right
+          e.preventDefault()
+          if (!isExpanded && nSlots > 1) {
+            setSelectedSlotIdx((i) => (i + 1) % nSlots)
+          }
+          break
+
+        case 'KeyD': // knob press → exit expanded OR exit kiosk
+          e.preventDefault()
+          if (isExpanded) {
+            setExpandedSlotIdx(null)
+          } else {
+            fetch('/api/kiosk/exit').catch(() => {})
+          }
+          break
+
+        case 'KeyE': // knob left → previous page
+          e.preventDefault()
+          setExpandedSlotIdx(null)
+          setSelectedSlotIdx(0)
+          setPageIdx((p) => (p - 1 + pages.length) % pages.length)
+          break
+
         case 'KeyF': // knob right → next page
           e.preventDefault()
+          setExpandedSlotIdx(null)
+          setSelectedSlotIdx(0)
           setPageIdx((p) => (p + 1) % pages.length)
-          break
-        case 'KeyE': // knob left → prev page
-          e.preventDefault()
-          setPageIdx((p) => (p - 1 + pages.length) % pages.length)
-          break
-        case 'KeyA': // button A → next page
-          e.preventDefault()
-          setPageIdx((p) => (p + 1) % pages.length)
-          break
-        case 'KeyB': // button B → prev page
-          e.preventDefault()
-          setPageIdx((p) => (p - 1 + pages.length) % pages.length)
-          break
-        case 'KeyC': // button C → first page
-          e.preventDefault()
-          setPageIdx(0)
-          break
-        case 'KeyD': // knob press → exit kiosk
-          e.preventDefault()
-          fetch('/api/kiosk/exit').catch(() => {})
           break
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [pages.length])
+  }, [pages, pageIdx, isExpanded, selectedSlotIdx])
   // ── End macro keyboard ─────────────────────────────────────────────────────
 
   const page     = pages[pageIdx]
   const colCount = Math.min(page.slots.length, 3)
+
+  // ── Expanded widget rendering ──────────────────────────────────────────────
+  const renderExpanded = () => {
+    const slot        = page.slots[expandedSlotIdx!]
+    const detailId    = slot.detailWidgetId ?? slot.widgetId
+    const DetailWidget = WIDGET_REGISTRY[detailId] ?? WIDGET_REGISTRY[slot.widgetId]
+    const payload     = wsData[slot.moduleId]
+    if (!DetailWidget) return null
+    return (
+      <main
+        className="flex-1 flex flex-col p-3 min-h-0"
+        style={{ touchAction: 'none' }}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+      >
+        <div
+          className="flex-1 card p-5 flex flex-col overflow-hidden"
+          style={{ backdropFilter: 'blur(12px)' }}
+        >
+          <DetailWidget
+            data={payload?.ok ? payload.data : null}
+            error={payload?.error}
+          />
+        </div>
+      </main>
+    )
+  }
 
   return (
     <div
@@ -175,7 +260,7 @@ export default function App() {
       onContextMenu={(e) => e.preventDefault()}
     >
 
-      {/* ── Header — tap to exit kiosk ──────────────────────────────────── */}
+      {/* ── Header ──────────────────────────────────────────────────────── */}
       <header
         className="flex items-center justify-between px-5 py-2.5 border-b border-white/[0.05]"
         onPointerDown={handleHeaderDown}
@@ -191,34 +276,55 @@ export default function App() {
           </span>
           <ConnectionDot connected={connected} />
         </div>
-        <ClockWidget />
+
+        <div className="flex items-center gap-3">
+          {/* Breadcrumb when expanded */}
+          {isExpanded && (
+            <span className="text-[11px] text-slate-600 font-mono">
+              {page.slots[expandedSlotIdx!].widgetId} · D = назад
+            </span>
+          )}
+          <ClockWidget />
+        </div>
       </header>
 
-      {/* ── Widget grid — pointer events for swipe/tap navigation ───────── */}
-      <main
-        className="flex-1 grid gap-3 p-3 min-h-0"
-        style={{
-          gridTemplateColumns: `repeat(${colCount}, 1fr)`,
-          touchAction: 'none', // deliver all pointer events to JS
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerCancel}
-      >
-        {page.slots.map((slot) => {
-          const Widget  = WIDGET_REGISTRY[slot.widgetId]
-          const payload = wsData[slot.moduleId]
-          if (!Widget) return null
-          return (
-            <WidgetCard key={slot.widgetId}>
-              <Widget
-                data={payload?.ok ? payload.data : null}
-                error={payload?.error}
-              />
-            </WidgetCard>
-          )
-        })}
-      </main>
+      {/* ── Expanded view ───────────────────────────────────────────────── */}
+      {isExpanded && renderExpanded()}
+
+      {/* ── Normal grid ─────────────────────────────────────────────────── */}
+      {!isExpanded && (
+        <main
+          className="flex-1 grid gap-3 p-3 min-h-0"
+          style={{
+            gridTemplateColumns: `repeat(${colCount}, 1fr)`,
+            touchAction: 'none',
+          }}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+        >
+          {page.slots.map((slot, idx) => {
+            const Widget  = WIDGET_REGISTRY[slot.widgetId]
+            const payload = wsData[slot.moduleId]
+            if (!Widget) return null
+            return (
+              <WidgetCard
+                key={slot.widgetId}
+                selected={selectedSlotIdx === idx}
+                onClick={() => {
+                  setSelectedSlotIdx(idx)
+                  setExpandedSlotIdx(idx)
+                }}
+              >
+                <Widget
+                  data={payload?.ok ? payload.data : null}
+                  error={payload?.error}
+                />
+              </WidgetCard>
+            )
+          })}
+        </main>
+      )}
 
     </div>
   )

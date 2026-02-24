@@ -79,11 +79,20 @@ class WeatherModule(BaseModule):
                 "relative_humidity_2m",
                 "wind_speed_10m",
                 "wind_direction_10m",
+                "wind_gusts_10m",
+                "surface_pressure",
                 "precipitation",
                 "weather_code",
                 "is_day",
+                "uv_index",
             ]),
-            "daily": "temperature_2m_max,temperature_2m_min",
+            "daily": ",".join([
+                "temperature_2m_max",
+                "temperature_2m_min",
+                "precipitation_sum",
+                "sunrise",
+                "sunset",
+            ]),
             "forecast_days": 1,
         }
 
@@ -98,6 +107,13 @@ class WeatherModule(BaseModule):
         code = int(cur.get("weather_code", 0))
         condition, description = _wmo(code)
 
+        # sunrise/sunset come as "2024-01-15T08:23" — strip date prefix
+        def _time_only(dt_str: str) -> str:
+            return dt_str[11:16] if len(dt_str) >= 16 else dt_str
+
+        sunrise_raw = daily.get("sunrise", [""])[0]
+        sunset_raw  = daily.get("sunset",  [""])[0]
+
         return {
             "location":      self.location_name,
             "temp":          round(cur["temperature_2m"], 1),
@@ -105,10 +121,16 @@ class WeatherModule(BaseModule):
             "humidity":      int(cur["relative_humidity_2m"]),
             "wind_speed":    round(cur["wind_speed_10m"], 1),
             "wind_dir":      _wind_dir(cur.get("wind_direction_10m", 0)),
+            "wind_gusts":    round(cur.get("wind_gusts_10m", 0), 1),
+            "pressure":      round(cur.get("surface_pressure", 0), 1),
             "precipitation": round(cur.get("precipitation", 0), 1),
+            "uv_index":      round(cur.get("uv_index", 0), 1),
             "condition":     condition,
             "description":   description,
             "is_day":        bool(cur.get("is_day", 1)),
             "temp_max":      round(daily.get("temperature_2m_max", [cur["temperature_2m"]])[0], 1),
             "temp_min":      round(daily.get("temperature_2m_min", [cur["temperature_2m"]])[0], 1),
+            "precip_today":  round(daily.get("precipitation_sum", [0])[0], 1),
+            "sunrise":       _time_only(sunrise_raw),
+            "sunset":        _time_only(sunset_raw),
         }

@@ -160,7 +160,7 @@ pi-dashboard/
 | `plants` | `plants.py` | Pushgateway `/api/v1/metrics` | `plants[]` (name, humidity, humidity_min, humidity_max, temp, battery, image_url) |
 
 **Картинки растений** (`/api/plants/image/{name}`) проксируются бэкендом через SOCKS5 и кэшируются на диск в `/tmp/plant_images/` внутри контейнера. При повторных запросах отдаются с диска без обращения к `img.artfaal.ru`. Кэш сбрасывается только при пересоздании контейнера (`docker compose up --build`).
-| `weather` | `weather.py` | Open-Meteo API | `temp`, `feels_like`, `humidity`, `wind_speed`, `wind_dir`, `condition`, `description`, `temp_max`, `temp_min`, … |
+| `weather` | `weather.py` | Open-Meteo API | `temp`, `feels_like`, `humidity`, `wind_speed`, `wind_dir`, `wind_gusts`, `pressure` (гПа), `precipitation`, `uv_index`, `condition`, `description`, `is_day`, `temp_max`, `temp_min`, `precip_today`, `sunrise`, `sunset` |
 
 ---
 
@@ -202,31 +202,52 @@ export const DASHBOARD_CONFIG = {
 Физическое устройство: мини-механическая клавиатура с 3 кнопками и поворотным энкодером.
 Запрограммирована через Windows-ПО производителя на отправку букв `a–f`.
 
-| Физическая кнопка | Посылает | `e.code` в JS | Текущее действие |
-|-------------------|----------|---------------|-----------------|
-| Button A          | `a`      | `KeyA`        | Следующая страница |
-| Button B          | `b`      | `KeyB`        | Предыдущая страница |
-| Button C          | `c`      | `KeyC`        | На первую страницу |
-| Knob нажатие      | `d`      | `KeyD`        | Выход из kiosk |
+| Физическая кнопка | Посылает | `e.code` в JS | Действие |
+|-------------------|----------|---------------|---------|
+| Button A          | `a`      | `KeyA`        | Выбрать виджет левее (циклично) |
+| Button B          | `b`      | `KeyB`        | Войти в виджет / выйти обратно |
+| Button C          | `c`      | `KeyC`        | Выбрать виджет правее (циклично) |
+| Knob нажатие      | `d`      | `KeyD`        | Выйти из виджета ИЛИ выйти из kiosk |
 | Knob влево        | `e`      | `KeyE`        | Предыдущая страница |
 | Knob вправо       | `f`      | `KeyF`        | Следующая страница |
 
-**Как переназначить действие** — в `frontend/src/App.tsx` найти секцию `Macro keyboard` и поменять тело нужного `case`:
+### Выбор и раскрытие виджетов
 
-```typescript
-case 'KeyA': // button A
-  e.preventDefault()
-  // ← вставить своё действие сюда
-  break
+Виджеты на странице можно выбирать клавишами A/C — выбранный подсвечивается indigo-рамкой. Нажатие B (или тап по виджету) разворачивает его на весь экран, показывая детальный вид (`detailWidgetId`). Выйти — клавишей B или D, а также тапом по экрану.
+
+```
+[Главная страница]               [Детальный вид — weather_detail]
+┌──────┬──────┬──────┐           ┌─────────────────────────────┐
+│  CO₂ │[Пог.]│ Inet │  ──B──►  │   Погода · подробно         │
+│      │[====]│      │           │   +3° / ощущ. +1°           │
+└──────┴──────┴──────┘           │   Ветер, давление, УФ, ...  │
+   A ◄──── выбор ────► C         └─────────────────────────────┘
+                                         D / B = назад
 ```
 
-Доступные действия из контекста компонента:
-- `setPageIdx(n)` — перейти на страницу с индексом n
-- `setPageIdx(p => (p + 1) % pages.length)` — следующая страница
-- `setPageIdx(0)` — на первую страницу
-- `fetch('/api/kiosk/exit')` — закрыть Chromium kiosk
+Состояния клавиш в зависимости от режима:
+
+| Клавиша | Режим страницы | Режим детального вида |
+|---------|---------------|----------------------|
+| A       | Выбрать влево | — (нет действия) |
+| B       | Войти в виджет | Выйти назад |
+| C       | Выбрать вправо | — (нет действия) |
+| D       | Выйти из kiosk | Выйти назад |
+| E / F   | Смена страницы | Смена страницы + выход |
 
 > Используется `e.code` (физическая позиция клавиши), а не `e.key` (символ) — поэтому язык раскладки на Pi не влияет на работу клавиатуры.
+
+### Как добавить детальный вид для виджета
+
+1. Создать `MyDetailWidget.tsx` в `src/widgets/`
+2. Зарегистрировать в `registry.ts`: `my_detail: MyDetailWidget`
+3. Добавить `detailWidgetId: 'my_detail'` к нужному слоту в `dashboard.config.ts`:
+
+```typescript
+{ widgetId: 'my_widget', moduleId: 'my_module', detailWidgetId: 'my_detail' }
+```
+
+Если `detailWidgetId` не задан — при раскрытии показывается тот же виджет, только полноэкранно.
 
 ### Реестр виджетов
 
@@ -240,6 +261,7 @@ case 'KeyA': // button A
 | `internet` | `InternetWidget` | `internet` | Online/Offline, список таргетов с latency |
 | `plants` | `PlantsWidget` | `plants` | N карточек на экран (`VITE_PLANTS_PER_PAGE`), фото, бар влажности min–max, статус ↓/✓/↑, температура, боковая пагинация |
 | `weather` | `WeatherWidget` | `weather` | Температура, ощущается, влажность, ветер, диапазон дня |
+| `weather_detail` | `WeatherDetailWidget` | `weather` | Подробный вид: ветер+порывы, давление, УФ-индекс, осадки за день, восход/закат, бар диапазона дня |
 | `temp_room` | `TempRoomWidget` | `co2` | Температура в помещении, comfort range |
 | *(header)* | `ClockWidget` | *(local)* | Часы HH:MM:SS + дата |
 

@@ -28,7 +28,13 @@ export interface WeatherData {
   humidity: number
   wind_speed: number
   wind_dir: string
+  wind_gusts?: number
+  pressure?: number
   precipitation: number
+  uv_index?: number
+  precip_today?: number
+  sunrise?: string
+  sunset?: string
   condition: string
   description: string
   is_day: boolean
