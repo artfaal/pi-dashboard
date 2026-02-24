@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useLayoutEffect } from 'react'
 import type { PlantsData, PlantData, WidgetProps } from '../types'
 
 function HumidityBar({ value, min, max }: { value: number; min: number; max: number }) {
@@ -86,6 +86,20 @@ function chunk<T>(arr: T[], size: number): T[][] {
 
 export function PlantsDetailWidget({ data, error }: WidgetProps) {
   const prevRef = useRef<PlantsData | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [pageHeight, setPageHeight] = useState(0)
+
+  // Измеряем точную высоту scroll-контейнера (родительского элемента),
+  // чтобы каждая «страница» из 3 карточек занимала ровно один экран.
+  useLayoutEffect(() => {
+    const parent = rootRef.current?.parentElement
+    if (!parent) return
+    setPageHeight(parent.clientHeight)
+    const ro = new ResizeObserver(() => setPageHeight(parent.clientHeight))
+    ro.observe(parent)
+    return () => ro.disconnect()
+  }, [])
+
   const pd = data as PlantsData | null
   if (pd) prevRef.current = pd
   const displayed = pd ?? prevRef.current
@@ -99,15 +113,22 @@ export function PlantsDetailWidget({ data, error }: WidgetProps) {
   }
 
   const pages = chunk(displayed.plants, 3)
+  // Fallback: header (~40px) + main p-3 (24px) = 64px
+  const h = pageHeight > 0 ? `${pageHeight}px` : 'calc(100dvh - 64px)'
 
   return (
-    <div className="flex flex-col gap-3 animate-fadeIn">
+    // Отрицательные вертикальные отступы «съедают» padding родителя (p-5 = 20px),
+    // чтобы страницы начинались с y=0. Тогда scrollBy(clientHeight) = ровно одна страница.
+    <div
+      ref={rootRef}
+      className="flex flex-col animate-fadeIn"
+      style={{ marginTop: '-20px', marginBottom: '-20px' }}
+    >
       {pages.map((page, pi) => (
-        // Каждая «страница» занимает весь видимый экран (100dvh - шапка - паддинги)
         <div
           key={pi}
-          className="flex flex-row gap-3 flex-shrink-0"
-          style={{ height: 'calc(100dvh - 80px)' }}
+          className="flex flex-row gap-3 py-5 flex-shrink-0"
+          style={{ height: h }}
         >
           {page.map(plant => <PlantCard key={plant.name} plant={plant} />)}
           {/* Пустые слоты чтобы карточки не растягивались на последней неполной странице */}
