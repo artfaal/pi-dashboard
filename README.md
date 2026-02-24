@@ -120,6 +120,7 @@ pi-dashboard/
 │           ├── InternetWidget.tsx
 │           ├── InternetDetailWidget.tsx
 │           ├── PlantsWidget.tsx
+│           ├── PlantsDetailWidget.tsx
 │           ├── ProxyWidget.tsx
 │           ├── ProxyDetailWidget.tsx
 │           ├── RouterWidget.tsx
@@ -169,7 +170,7 @@ pi-dashboard/
 | `plants` | `plants.py` | Pushgateway `/api/v1/metrics` | `plants[]` (name, humidity, humidity_min, humidity_max, temp, battery, image_url) |
 | `weather` | `weather.py` | Open-Meteo API | `temp`, `feels_like`, `humidity`, `wind_speed`, `wind_dir`, `wind_gusts`, `pressure` (гПа), `precipitation`, `uv_index`, `condition`, `description`, `is_day`, `temp_max`, `temp_min`, `precip_today`, `sunrise`, `sunset` |
 | `router` | `router.py` | SSH → OpenWrt (192.168.2.1) | `wan_ip`, `uptime_secs`, `dhcp_clients`, `wan_rx_bps`, `wan_tx_bps` |
-| `proxy` | `proxy.py` | HTTP/SOCKS/TLS тесты с Pi | `ok`, `proxies[]` (name, type, ok, ms, exit_ip, exit_isp, error) |
+| `proxy` | `proxy.py` | HTTP/SOCKS/TLS тесты с Pi | `ok`, `proxies[]` (name, type, ok, ms, exit_ip, exit_isp, error) — SOCKS5, HTTP, HTTPS, SS (TCP), Trojan (TLS) |
 
 **Картинки растений** (`/api/plants/image/{name}`) проксируются бэкендом через SOCKS5 и кэшируются на диск в `/tmp/plant_images/` внутри контейнера. При повторных запросах отдаются с диска без обращения к `img.artfaal.ru`. Кэш сбрасывается только при пересоздании контейнера.
 
@@ -194,7 +195,7 @@ export const DASHBOARD_CONFIG = {
       { widgetId: 'proxy',  moduleId: 'proxy',  detailWidgetId: 'proxy_detail' },
     ]},
     { id: 'plants', label: 'Растения', slots: [
-      { widgetId: 'plants', moduleId: 'plants' },
+      { widgetId: 'plants', moduleId: 'plants', detailWidgetId: 'plants_detail' },
     ]},
   ],
   rotate: { enabled: ..., intervalSeconds: ... },
@@ -231,15 +232,15 @@ export const DASHBOARD_CONFIG = {
 
 Виджеты на странице можно выбирать клавишами A/C — выбранный подсвечивается indigo-рамкой. Нажатие B (или тап по виджету) разворачивает его на весь экран, показывая детальный вид (`detailWidgetId`). Выйти — клавишей B или D, а также тапом по экрану.
 
-В развёрнутом виджете **энкодер прокручивает содержимое** (↑/↓ по 120px). Это полезно когда контент не вмещается на экран (например, список из 6+ прокси).
+В развёрнутом виджете **энкодер прокручивает содержимое** (↑/↓ на высоту видимой области). Это полезно когда контент не вмещается на экран — списки прокси, страницы растений.
 
 ```
 [Главная страница]               [Детальный вид — proxy_detail]
 ┌──────┬──────┬──────┐           ┌─────────────────────────────┐
 │Router│[Prox]│      │  ──B──►  │   Proxy / VPN · подробно    │  ▲
-│      │[====]│      │           │   ● Xray      SOCKS5  300ms │  │ Knob↑
-└──────┴──────┴──────┘           │   ● SOCKS5    ...           │  │
-   A ◄──── выбор ────► C         │   ● HTTP      ...           │  ▼ Knob↓
+│      │[====]│      │           │   ● SOCKS5    ...    300ms  │  │ Knob↑
+└──────┴──────┴──────┘           │   ● HTTP      ...           │  │
+   A ◄──── выбор ────► C         │   ● Trojan    ...           │  ▼ Knob↓
                                  └─────────────────────────────┘
                                        E/F = скролл · D = назад
 ```
@@ -265,9 +266,10 @@ export const DASHBOARD_CONFIG = {
 | `co2` | `CO2Widget` | `co2` | Круговой gauge CO₂, sparkline, уровень |
 | `internet` | `InternetWidget` | `internet` | Online/Offline, пинги с latency-баром, DNS статус |
 | `internet_detail` | `InternetDetailWidget` | `internet` | Все цели с барами, DNS резолв, статистика |
-| `plants` | `PlantsWidget` | `plants` | Карточки растений, фото, бар влажности, боковая пагинация |
-| `proxy` | `ProxyWidget` | `proxy` | Цветные точки по 6 прокси (Xray, SOCKS5, HTTP, HTTPS, SS, Trojan) с latency |
-| `proxy_detail` | `ProxyDetailWidget` | `proxy` | Карточки: протокол, latency, exit IP + ISP (или ошибка) |
+| `plants` | `PlantsWidget` | `plants` | Компактная сетка 5×N: все растения сразу — фото + цветной процент влажности |
+| `plants_detail` | `PlantsDetailWidget` | `plants` | Детальные карточки по 3 на экране: фото, бар влажности, температура; энкодер E/F листает постранично |
+| `proxy` | `ProxyWidget` | `proxy` | Цветные точки по 5 прокси (SOCKS5, HTTP, HTTPS, SS, Trojan) с latency |
+| `proxy_detail` | `ProxyDetailWidget` | `proxy` | Карточки: протокол, latency, exit IP + ISP (или ошибка); скролл энкодером |
 | `router` | `RouterWidget` | `router` | WAN IP, аптайм, кол-во DHCP-клиентов, скорость WAN ↓/↑ |
 | `weather` | `WeatherWidget` | `weather` | Температура, ощущается, влажность, ветер, диапазон дня |
 | `weather_detail` | `WeatherDetailWidget` | `weather` | Ветер+порывы, давление, УФ-индекс, осадки, восход/закат, бар диапазона |
@@ -311,9 +313,6 @@ VITE_TEMP_COLD=18               # нижняя граница комфортно
 VITE_TEMP_WARM=24               # верхняя граница
 VITE_TEMP_SCALE_MIN=10          # минимум шкалы бара
 VITE_TEMP_SCALE_MAX=40          # максимум шкалы бара
-
-# ── Растения — фронтенд (VITE — rebuild при изменении) ───────────────────────
-VITE_PLANTS_PER_PAGE=3          # карточек на экране одновременно
 
 # ── CO2 сенсор ────────────────────────────────────────────────────────────────
 CO2_METRICS_URL=http://co2mond:9999/metrics
