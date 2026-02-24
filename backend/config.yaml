@@ -59,8 +59,6 @@ modules:
     enabled: true
     interval: ${PROXY_INTERVAL}
     config:
-      router_host: "${ROUTER_HOST}"
-      router_port: 1080
-      vega_host:   "${PROXY_VEGA_HOST}"
-      vega_user:   "${PROXY_VEGA_USER}"
-      vega_pass:   "${PROXY_VEGA_PASS}"
+      vega_host: "${PROXY_VEGA_HOST}"
+      vega_user: "${PROXY_VEGA_USER}"
+      vega_pass: "${PROXY_VEGA_PASS}"

@@ -33,7 +33,7 @@ export const DASHBOARD_CONFIG = {
       id: 'plants',
       label: 'Растения',
       slots: [
-        { widgetId: 'plants', moduleId: 'plants' },
+        { widgetId: 'plants', moduleId: 'plants', detailWidgetId: 'plants_detail' },
       ],
     },
   ] as PageConfig[],

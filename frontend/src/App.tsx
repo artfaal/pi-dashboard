@@ -207,7 +207,8 @@ export default function App() {
         case 'KeyE': // knob left → прокрутка вверх (если expanded) | предыдущая страница
           e.preventDefault()
           if (isExpanded) {
-            expandedScrollRef.current?.scrollBy({ top: -120, behavior: 'smooth' })
+            const el = expandedScrollRef.current
+            el?.scrollBy({ top: -(el.clientHeight), behavior: 'smooth' })
           } else {
             setExpandedSlotIdx(null)
             setSelectedSlotIdx(0)
@@ -218,7 +219,8 @@ export default function App() {
         case 'KeyF': // knob right → прокрутка вниз (если expanded) | следующая страница
           e.preventDefault()
           if (isExpanded) {
-            expandedScrollRef.current?.scrollBy({ top: 120, behavior: 'smooth' })
+            const el = expandedScrollRef.current
+            el?.scrollBy({ top: el.clientHeight, behavior: 'smooth' })
           } else {
             setExpandedSlotIdx(null)
             setSelectedSlotIdx(0)

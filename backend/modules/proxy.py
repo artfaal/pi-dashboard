@@ -22,17 +22,13 @@ class ProxyModule(BaseModule):
 
     def __init__(
         self,
-        router_host: str  = "192.168.2.1",
-        router_port: int  = 1080,
-        vega_host:   str  = "vega.artfaal.ru",
-        vega_pass:   str  = "",
-        vega_user:   str  = "artfaal",
+        vega_host: str = "vega.artfaal.ru",
+        vega_pass: str = "",
+        vega_user: str = "artfaal",
     ) -> None:
-        self.router_host = router_host
-        self.router_port = router_port
-        self.vega_host   = vega_host
-        self.vega_user   = vega_user
-        self.vega_pass   = vega_pass
+        self.vega_host = vega_host
+        self.vega_user = vega_user
+        self.vega_pass = vega_pass
 
     # ── individual testers ────────────────────────────────────────────────────
 
@@ -105,11 +101,6 @@ class ProxyModule(BaseModule):
         vh    = self.vega_host
 
         tests = [
-            # xray on router — tests the full VLESS/Trojan/SS chain via router's local SOCKS5
-            self._test_proxy(
-                "Xray", "socks5",
-                f"socks5://{self.router_host}:{self.router_port}",
-            ),
             # direct SOCKS5 on vega
             self._test_proxy(
                 "SOCKS5", "socks5",

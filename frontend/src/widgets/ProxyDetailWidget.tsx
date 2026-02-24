@@ -133,9 +133,8 @@ export function ProxyDetailWidget({ data, error }: WidgetProps) {
       </div>
 
       {/* Legend */}
-      <div className="border-t border-white/[0.05] pt-1.5 flex gap-3 text-[9px] text-slate-600">
-        <span>Xray → через роутер (VLESS/Trojan/SS)</span>
-        <span className="ml-auto">SS/Trojan = порт/TLS</span>
+      <div className="border-t border-white/[0.05] pt-1.5 text-[9px] text-slate-600 text-right">
+        SS/Trojan = порт/TLS
       </div>
 
     </div>
