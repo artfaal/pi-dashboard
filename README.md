@@ -40,6 +40,7 @@
 │  │   │    plants.py        │   └────────────────────┘  │  │
 │  │   │    router.py        │                            │  │
 │  │   │    proxy.py         │                            │  │
+│  │   │    torrent.py       │                            │  │
 │  │   │    weather.py       │                            │  │
 │  │   │                     │                            │  │
 │  │   │  WebSocket /ws      │                            │  │
@@ -98,8 +99,9 @@ pi-dashboard/
 │       ├── co2.py              # CO2 + температура (co2mond Prometheus)
 │       ├── internet.py         # Пинг HTTP-таргетов + DNS resolve
 │       ├── plants.py           # Датчики влажности растений (Pushgateway)
-│       ├── proxy.py            # Проверка прокси: Xray/SOCKS5/HTTP/HTTPS/SS/Trojan
+│       ├── proxy.py            # Проверка прокси: SOCKS5/HTTP/HTTPS/SS/Trojan
 │       ├── router.py           # Статистика роутера (OpenWrt SSH)
+│       ├── torrent.py          # Transmission RPC + disk space via SSH
 │       └── weather.py          # Погода (Open-Meteo API)
 │
 ├── frontend/
@@ -126,7 +128,9 @@ pi-dashboard/
 │           ├── RouterWidget.tsx
 │           ├── WeatherWidget.tsx
 │           ├── WeatherDetailWidget.tsx
-│           └── TempRoomWidget.tsx
+│           ├── TempRoomWidget.tsx
+│           ├── TorrentWidget.tsx
+│           └── TorrentDetailWidget.tsx
 │
 └── start-kiosk.sh              # Запуск Chromium kiosk (ждёт :3000)
 ```
@@ -140,7 +144,8 @@ pi-dashboard/
 | **Backend** | Python + FastAPI | Async, WebSocket из коробки |
 | **Transport** | WebSocket | Сервер пушит данные — нет polling |
 | **HTTP-клиент** | httpx + socksio | Async HTTP, поддержка SOCKS5/HTTP прокси |
-| **SSH-клиент** | asyncssh | Async SSH к роутеру (OpenWrt) |
+| **SSH-клиент** | asyncssh | Async SSH к роутеру (OpenWrt) и медиа-серверу (диски) |
+| **Torrent-клиент** | transmission-rpc | Синхронный RPC-клиент Transmission (запускается в executor) |
 | **Frontend** | React + Vite + TypeScript | Компонент = виджет |
 | **Стили** | TailwindCSS | Быстро, без кастомного CSS |
 | **Proxy** | nginx | Один порт наружу, WS proxy |
@@ -171,6 +176,7 @@ pi-dashboard/
 | `weather` | `weather.py` | Open-Meteo API | `temp`, `feels_like`, `humidity`, `wind_speed`, `wind_dir`, `wind_gusts`, `pressure` (гПа), `precipitation`, `uv_index`, `condition`, `description`, `is_day`, `temp_max`, `temp_min`, `precip_today`, `sunrise`, `sunset` |
 | `router` | `router.py` | SSH → OpenWrt (192.168.2.1) | `wan_ip`, `uptime_secs`, `dhcp_clients`, `wan_rx_bps`, `wan_tx_bps` |
 | `proxy` | `proxy.py` | HTTP/SOCKS/TLS тесты с Pi | `ok`, `proxies[]` (name, type, ok, ms, exit_ip, exit_isp, error) — SOCKS5, HTTP, HTTPS, SS (TCP), Trojan (TLS) |
+| `torrent` | `torrent.py` | Transmission RPC + SSH → медиа-сервер | `downloading` (активный торрент или null), `recent[]` (до 10, по дате), `speed` (download_bps, upload_bps), `disks[]` (name, mount, total_gb, free_gb, used_pct) |
 
 **Картинки растений** (`/api/plants/image/{name}`) проксируются бэкендом через SOCKS5 и кэшируются на диск в `/tmp/plant_images/` внутри контейнера. При повторных запросах отдаются с диска без обращения к `img.artfaal.ru`. Кэш сбрасывается только при пересоздании контейнера.
 
@@ -193,6 +199,9 @@ export const DASHBOARD_CONFIG = {
     { id: 'network', label: 'Сеть', slots: [
       { widgetId: 'router', moduleId: 'router' },
       { widgetId: 'proxy',  moduleId: 'proxy',  detailWidgetId: 'proxy_detail' },
+    ]},
+    { id: 'media', label: 'Медиа', slots: [
+      { widgetId: 'torrent', moduleId: 'torrent', detailWidgetId: 'torrent_detail' },
     ]},
     { id: 'plants', label: 'Растения', slots: [
       { widgetId: 'plants', moduleId: 'plants', detailWidgetId: 'plants_detail' },
@@ -274,6 +283,8 @@ export const DASHBOARD_CONFIG = {
 | `weather` | `WeatherWidget` | `weather` | Температура, ощущается, влажность, ветер, диапазон дня |
 | `weather_detail` | `WeatherDetailWidget` | `weather` | Ветер+порывы, давление, УФ-индекс, осадки, восход/закат, бар диапазона |
 | `temp_room` | `TempRoomWidget` | `co2` | Температура в помещении, comfort range |
+| `torrent` | `TorrentWidget` | `torrent` | Активная загрузка (если есть) с прогресс-баром, список последних 10 торрентов, свободное место на 3 дисках |
+| `torrent_detail` | `TorrentDetailWidget` | `torrent` | Крупная карточка активной загрузки (скорость, ETA, пиры), полный список с прогресс-барами, детальные диски с цветовой кодировкой |
 | *(header)* | `ClockWidget` | *(local)* | Часы HH:MM:SS + дата |
 
 Все виджеты принимают `{ data: unknown; error?: string }` — интерфейс `WidgetProps`.
@@ -343,6 +354,18 @@ PROXY_VEGA_USER=user
 PROXY_VEGA_PASS=<password>
 PROXY_INTERVAL=120
 
+# ── Torrent (Transmission RPC + disk space via SSH) ──────────────────────────
+TORRENT_HOST=192.168.2.169          # IP медиа-сервера (Transmission)
+TORRENT_PORT=9091
+TORRENT_USER=admin
+TORRENT_PASS=<password>
+TORRENT_SSH_HOST=192.168.2.169      # тот же сервер, для df по SSH
+TORRENT_SSH_USER=southnet-mac-server
+TORRENT_INTERVAL=30
+# SSH ключ — тот же ROUTER_SSH_KEY_B64 (добавить pubkey на медиа-сервер):
+# cat /tmp/pi_dashboard_key.pub | ssh user@host "cat >> ~/.ssh/authorized_keys"
+# ⚠️ Использовать IP, а не .local — mDNS не работает внутри Docker-контейнера
+
 # ── Растения — бэкенд ─────────────────────────────────────────────────────────
 PLANTS_PUSHGATEWAY_URL=https://pushgateway.example.com
 PLANTS_INTERVAL=300
@@ -354,7 +377,11 @@ PLANTS_PROXY_USER=
 PLANTS_PROXY_PASSWORD=
 ```
 
-### Настройка SSH-ключа для роутера
+### Настройка SSH-ключа (роутер + медиа-сервер)
+
+Один и тот же ключ (`ROUTER_SSH_KEY_B64`) используется для двух SSH-подключений бэкенда:
+- **Роутер** (OpenWrt, `192.168.2.1`) — для WAN IP, аптайма, DHCP, скорости
+- **Медиа-сервер** (southnet, `192.168.2.169`) — для информации о дисках через `df`
 
 Бэкенд (Docker-контейнер на Pi) подключается к роутеру по SSH для получения WAN IP, аптайма, DHCP-клиентов и скорости WAN.
 
@@ -380,6 +407,12 @@ base64 -i /tmp/pi_dashboard_key | tr -d '\n'
 base64 -w 0 /tmp/pi_dashboard_key
 ```
 Результат вставить в `ROUTER_SSH_KEY_B64=...` в `.env`.
+
+**4. Добавить тот же публичный ключ на медиа-сервер:**
+```bash
+cat /tmp/pi_dashboard_key.pub | ssh southnet-mac-server@192.168.2.169 \
+  "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+```
 
 > Ключ хранится в `.env` (gitignored) и читается бэкендом из переменной окружения контейнера. В памяти декодируется через `base64.b64decode()` — файл на диск не пишется.
 
@@ -579,6 +612,10 @@ ssh artfaal@192.168.2.215 "pkill -x chromium; mv ~/.config/chromium ~/.config/ch
 ```
 
 Нормально для DSI-дисплея — у него нет стандартного EDID. Игнорировать.
+
+### mDNS (`.local`) не работает внутри Docker
+
+Имена вида `southnet.local` не резолвятся внутри контейнеров — mDNS (Bonjour/Avahi) там недоступен. Для всех SSH и TCP подключений к локальным хостам **всегда указывать IP-адрес** в `.env` вместо `.local` hostname.
 
 ### Порядок запуска
 
