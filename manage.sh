@@ -5,10 +5,12 @@
 
 set -euo pipefail
 
-# Загружаем .env если есть
+# Загружаем .env если есть (set -a автоматически экспортирует все переменные)
 if [ -f "$(dirname "$0")/.env" ]; then
-  # shellcheck disable=SC2046
-  export $(grep -v '^\s*#' "$(dirname "$0")/.env" | grep -v '^\s*$' | xargs)
+  set -a
+  # shellcheck disable=SC1091
+  source "$(dirname "$0")/.env"
+  set +a
 fi
 
 PI_HOST="${PI_HOST:-192.168.2.215}"
