@@ -175,11 +175,19 @@ async def snapshot():
 
 _IMAGE_BASE_URL = os.environ.get("PLANTS_IMAGE_BASE_URL", "https://img.artfaal.ru/plants").rstrip("/")
 _IMAGE_TIMEOUT  = int(os.environ.get("PLANTS_IMAGE_TIMEOUT", "10"))
+_IMAGE_CACHE_DIR = Path("/tmp/plant_images")
+_IMAGE_CACHE_DIR.mkdir(exist_ok=True)
 
 
 @app.get("/api/plants/image/{name}")
 async def plants_image(name: str):
-    """Proxy plant images through SOCKS5 so the browser doesn't need direct access."""
+    """Proxy plant images through SOCKS5 with disk cache inside the container."""
+    safe_name = urllib.parse.quote(name, safe="")
+    cache_file = _IMAGE_CACHE_DIR / f"{safe_name}.png"
+
+    if cache_file.exists():
+        return Response(content=cache_file.read_bytes(), media_type="image/png")
+
     module = module_instances.get("plants")
     proxy = module.proxy if module else None
     url = f"{_IMAGE_BASE_URL}/{urllib.parse.quote(name)}.png"
@@ -187,10 +195,13 @@ async def plants_image(name: str):
         async with httpx.AsyncClient(timeout=_IMAGE_TIMEOUT, proxy=proxy) as client:
             r = await client.get(url)
             r.raise_for_status()
-        content_type = r.headers.get("content-type", "image/png")
-        return Response(content=r.content, media_type=content_type)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+    content_type = r.headers.get("content-type", "image/png")
+    cache_file.write_bytes(r.content)
+    logger.info("[plants] cached image: %s", name)
+    return Response(content=r.content, media_type=content_type)
 
 
 @app.websocket("/ws")
