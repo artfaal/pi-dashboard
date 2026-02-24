@@ -15,8 +15,10 @@ until curl -sf "$URL" > /dev/null 2>&1; do
 done
 
 echo "Dashboard ready after ${WAITED}s — launching Chromium kiosk"
-# Удаляем стейл-лок если остался от предыдущего краша
+# Удаляем стейл-лок и GPU-кэш (битый кэш вызывает SIGTRAP при старте)
 rm -f "${HOME}/.config/chromium/SingletonLock"
+rm -rf "${HOME}/.config/chromium/Default/GPUCache"
+rm -rf "${HOME}/.config/chromium/Default/ShaderCache"
 exec /usr/bin/chromium \
   --kiosk \
   --noerrdialogs \
