@@ -158,6 +158,8 @@ pi-dashboard/
 | `co2` | `co2.py` | co2mond `:9999/metrics` | `ppm`, `temp` |
 | `internet` | `internet.py` | HTTP GET к таргетам | `online`, `targets[]` |
 | `plants` | `plants.py` | Pushgateway `/api/v1/metrics` | `plants[]` (name, humidity, humidity_min, humidity_max, temp, battery, image_url) |
+
+**Картинки растений** (`/api/plants/image/{name}`) проксируются бэкендом через SOCKS5 и кэшируются на диск в `/tmp/plant_images/` внутри контейнера. При повторных запросах отдаются с диска без обращения к `img.artfaal.ru`. Кэш сбрасывается только при пересоздании контейнера (`docker compose up --build`).
 | `weather` | `weather.py` | Open-Meteo API | `temp`, `feels_like`, `humidity`, `wind_speed`, `wind_dir`, `condition`, `description`, `temp_max`, `temp_min`, … |
 
 ---
@@ -317,7 +319,16 @@ PLANTS_PROXY_PASSWORD=
 
 ### Kiosk-скрипт — `start-kiosk.sh`
 
-Ждёт пока `:3000` ответит, потом запускает Chromium с флагами:
+Ждёт пока `:3000` ответит, потом **очищает остатки предыдущего сеанса** и запускает Chromium:
+
+```bash
+rm -f ~/.config/chromium/SingletonLock      # стейл-лок после краша
+rm -rf ~/.config/chromium/Default/GPUCache  # битый GPU-кэш → SIGTRAP при старте
+rm -rf ~/.config/chromium/Default/ShaderCache
+exec /usr/bin/chromium ...
+```
+
+Ключевые флаги Chromium:
 - `--kiosk` — полный экран без UI
 - `--password-store=basic` — **критично**: без него GNOME Keyring блокирует запуск
 - `--ozone-platform=wayland` — Wayland backend
@@ -437,6 +448,19 @@ export const WIDGET_REGISTRY = {
 ### `--password-store=basic` в Chromium
 
 Без этого флага Chromium показывает диалог GNOME Keyring при каждом старте — ломает kiosk. Флаг прописан в `start-kiosk.sh`.
+
+### Chromium падает с SIGTRAP после краша
+
+Если Chromium завершился некорректно (kill, перезагрузка), он оставляет `SingletonLock` и/или битый GPU-кэш. При следующем старте это вызывает SIGTRAP ещё до отрисовки. `start-kiosk.sh` автоматически удаляет эти артефакты при каждом запуске. Если проблема не исчезает — удалить весь профиль:
+
+```bash
+ssh artfaal@192.168.2.215 "pkill -x chromium; mv ~/.config/chromium ~/.config/chromium.bak"
+./manage.sh kiosk
+```
+
+### DBUS_SESSION_BUS_ADDRESS при запуске из SSH
+
+Без этой переменной labwc не активирует окно Chromium через xdg-activation — процесс запускается, но окно остаётся невидимым. `manage.sh kiosk` и `deploy` передают полное окружение через `KIOSK_ENV`.
 
 ### EDID ошибка в логах labwc
 
