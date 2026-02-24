@@ -125,6 +125,47 @@ export default function App() {
     }
   }, [])
 
+  // ── Macro keyboard (3 buttons + rotary encoder) ───────────────────────────
+  // Physical key mapping (programmed via keyboard's Windows software):
+  //   Button A → KeyA    Button B → KeyB    Button C → KeyC
+  //   Knob press → KeyD  Knob left → KeyE   Knob right → KeyF
+  //
+  // To change what a button does — edit the cases below.
+  // Use e.code (physical position) so layout language doesn't matter.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      switch (e.code) {
+        case 'KeyF': // knob right → next page
+          e.preventDefault()
+          setPageIdx((p) => (p + 1) % pages.length)
+          break
+        case 'KeyE': // knob left → prev page
+          e.preventDefault()
+          setPageIdx((p) => (p - 1 + pages.length) % pages.length)
+          break
+        case 'KeyA': // button A → next page
+          e.preventDefault()
+          setPageIdx((p) => (p + 1) % pages.length)
+          break
+        case 'KeyB': // button B → prev page
+          e.preventDefault()
+          setPageIdx((p) => (p - 1 + pages.length) % pages.length)
+          break
+        case 'KeyC': // button C → first page
+          e.preventDefault()
+          setPageIdx(0)
+          break
+        case 'KeyD': // knob press → exit kiosk
+          e.preventDefault()
+          fetch('/api/kiosk/exit').catch(() => {})
+          break
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [pages.length])
+  // ── End macro keyboard ─────────────────────────────────────────────────────
+
   const page     = pages[pageIdx]
   const colCount = Math.min(page.slots.length, 3)
 
