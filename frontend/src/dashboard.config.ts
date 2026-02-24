@@ -30,6 +30,13 @@ export const DASHBOARD_CONFIG = {
       ],
     },
     {
+      id: 'media',
+      label: 'Медиа',
+      slots: [
+        { widgetId: 'torrent', moduleId: 'torrent', detailWidgetId: 'torrent_detail' },
+      ],
+    },
+    {
       id: 'plants',
       label: 'Растения',
       slots: [

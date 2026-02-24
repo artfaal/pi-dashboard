@@ -21,6 +21,8 @@ import { RouterWidget } from './RouterWidget'
 import { WeatherWidget } from './WeatherWidget'
 import { WeatherDetailWidget } from './WeatherDetailWidget'
 import { TempRoomWidget } from './TempRoomWidget'
+import { TorrentWidget } from './TorrentWidget'
+import { TorrentDetailWidget } from './TorrentDetailWidget'
 
 export const WIDGET_REGISTRY: Record<string, ComponentType<WidgetProps>> = {
   co2:             CO2Widget,
@@ -34,4 +36,6 @@ export const WIDGET_REGISTRY: Record<string, ComponentType<WidgetProps>> = {
   weather:         WeatherWidget,
   weather_detail:  WeatherDetailWidget,
   temp_room:       TempRoomWidget,
+  torrent:         TorrentWidget,
+  torrent_detail:  TorrentDetailWidget,
 }

@@ -54,6 +54,18 @@ modules:
       host: "${ROUTER_HOST}"
       user: "${ROUTER_USER}"
 
+  # ── Torrent client (Transmission RPC) + disk space via SSH ────────────
+  - id: torrent
+    enabled: true
+    interval: ${TORRENT_INTERVAL}
+    config:
+      transmission_host: "${TORRENT_HOST}"
+      transmission_port: ${TORRENT_PORT}
+      transmission_user: "${TORRENT_USER}"
+      transmission_pass: "${TORRENT_PASS}"
+      ssh_host:          "${TORRENT_SSH_HOST}"
+      ssh_user:          "${TORRENT_SSH_USER}"
+
   # ── Proxy / VPN health checks ───────────────────────────────────────────
   - id: proxy
     enabled: true

@@ -83,6 +83,37 @@ export interface InternetData {
   dns_ms:   number | null
 }
 
+export interface TorrentItem {
+  id:                 number
+  name:               string
+  status:             'downloading' | 'seeding' | 'paused' | 'checking' | 'error' | 'unknown'
+  progress:           number        // 0–100
+  size_bytes:         number
+  download_speed_bps: number
+  upload_speed_bps:   number
+  eta_secs:           number | null
+  added_date:         string | null // ISO
+  peers:              number
+}
+
+export interface DiskInfo {
+  name:     string   // "Main" | "NVME" | "HDD"
+  mount:    string
+  total_gb: number
+  free_gb:  number
+  used_pct: number
+}
+
+export interface TorrentData {
+  downloading: TorrentItem | null
+  recent:      TorrentItem[]
+  speed: {
+    download_bps: number
+    upload_bps:   number
+  }
+  disks: DiskInfo[]
+}
+
 // Standard props interface for all widgets
 export interface WidgetProps {
   data: unknown

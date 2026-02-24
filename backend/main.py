@@ -19,6 +19,7 @@ from modules.internet import InternetModule
 from modules.plants import PlantsModule
 from modules.proxy import ProxyModule
 from modules.router import RouterModule
+from modules.torrent import TorrentModule
 from modules.weather import WeatherModule
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ MODULE_REGISTRY = {
     "plants":   PlantsModule,
     "proxy":    ProxyModule,
     "router":   RouterModule,
+    "torrent":  TorrentModule,
     "weather":  WeatherModule,
 }
 
