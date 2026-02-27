@@ -1,7 +1,7 @@
 import base64
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import asyncssh
 
@@ -25,20 +25,34 @@ def _parse_props(output: str) -> dict[str, str]:
     return props
 
 
+_TZ_OFFSETS: dict[str, int] = {
+    "UTC": 0, "GMT": 0,
+    "MSK": 3, "MSD": 4,       # Moscow Standard / Daylight
+    "EET": 2, "EEST": 3,      # Eastern Europe
+    "CET": 1, "CEST": 2,      # Central Europe
+    "YEKT": 5, "OMST": 6, "KRAT": 7, "IRKT": 8, "YAKT": 9,
+}
+
+
 def _parse_uptime(timestamp_str: str) -> int | None:
-    """Парсит ActiveEnterTimestamp → секунды аптайма."""
+    """Парсит ActiveEnterTimestamp → секунды аптайма.
+
+    Формат systemd: "Fri 2026-02-27 17:37:16 MSK"
+    Важно учитывать часовой пояс — MSK = UTC+3.
+    """
     if not timestamp_str or timestamp_str == "n/a":
         return None
-    # Format: "Fri 2026-02-27 13:51:49 MSK"  → drop weekday + tz name
     parts = timestamp_str.split()
-    if len(parts) < 4:
+    # Ожидаем: weekday date time tz  (минимум 3 токена с датой и временем)
+    if len(parts) < 3:
         return None
     try:
+        tz_name = parts[3] if len(parts) >= 4 else "UTC"
+        offset_h = _TZ_OFFSETS.get(tz_name, 0)
+        tz = timezone(timedelta(hours=offset_h))
         dt = datetime.strptime(f"{parts[1]} {parts[2]}", "%Y-%m-%d %H:%M:%S")
-        dt = dt.replace(tzinfo=timezone.utc)  # naive → UTC для расчёта разницы
-        now = datetime.now(timezone.utc)
-        # Убираем tzinfo чтобы сравнивать naive
-        delta = now - dt.replace(tzinfo=None).replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=tz)
+        delta = datetime.now(timezone.utc) - dt
         return max(0, int(delta.total_seconds()))
     except Exception:
         return None
