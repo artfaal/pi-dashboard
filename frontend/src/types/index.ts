@@ -157,4 +157,8 @@ export interface PlexData {
 export interface WidgetProps {
   data: unknown
   error?: string
+  // Optional: expanded widget can register a key handler.
+  // Called by App with 'KeyA'|'KeyC'|'KeyD' when widget is expanded.
+  // Return true = key consumed (don't run App default); false = fall through.
+  keyActionRef?: { current: ((code: string) => boolean) | null }
 }

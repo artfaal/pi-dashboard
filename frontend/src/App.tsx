@@ -63,6 +63,8 @@ export default function App() {
   const pressRef          = useRef<{ x: number; y: number; t: number } | null>(null)
   const headerRef         = useRef<number>(0)
   const expandedScrollRef = useRef<HTMLDivElement>(null)
+  // Expanded widget can register a key handler for A/C/D keys.
+  const widgetKeyRef      = useRef<((code: string) => boolean) | null>(null)
 
   const { rotate, pages } = DASHBOARD_CONFIG
   const isExpanded = expandedSlotIdx !== null
@@ -172,9 +174,11 @@ export default function App() {
       const nSlots = slots.length
 
       switch (e.code) {
-        case 'KeyA': // button A → select widget to the left
+        case 'KeyA': // button A → выбор влево / фокус в виджете влево
           e.preventDefault()
-          if (!isExpanded && nSlots > 1) {
+          if (isExpanded) {
+            widgetKeyRef.current?.('KeyA')
+          } else if (nSlots > 1) {
             setSelectedSlotIdx((i) => (i - 1 + nSlots) % nSlots)
           }
           break
@@ -188,17 +192,20 @@ export default function App() {
           }
           break
 
-        case 'KeyC': // button C → select widget to the right
+        case 'KeyC': // button C → выбор вправо / фокус в виджете вправо
           e.preventDefault()
-          if (!isExpanded && nSlots > 1) {
+          if (isExpanded) {
+            widgetKeyRef.current?.('KeyC')
+          } else if (nSlots > 1) {
             setSelectedSlotIdx((i) => (i + 1) % nSlots)
           }
           break
 
-        case 'KeyD': // knob press → exit expanded OR exit kiosk
+        case 'KeyD': // knob press → действие кнопки / выход / kiosk exit
           e.preventDefault()
           if (isExpanded) {
-            setExpandedSlotIdx(null)
+            const consumed = widgetKeyRef.current?.('KeyD') ?? false
+            if (!consumed) setExpandedSlotIdx(null)
           } else {
             fetch('/api/kiosk/exit').catch(() => {})
           }
@@ -260,6 +267,7 @@ export default function App() {
           <DetailWidget
             data={payload?.ok ? payload.data : null}
             error={payload?.error}
+            keyActionRef={widgetKeyRef}
           />
         </div>
       </main>
@@ -293,7 +301,7 @@ export default function App() {
           {/* Breadcrumb when expanded */}
           {isExpanded && (
             <span className="text-[11px] text-slate-600 font-mono">
-              {page.slots[expandedSlotIdx!].widgetId} · E/F = скролл · D = назад
+              {page.slots[expandedSlotIdx!].widgetId} · A/C = фокус · D = назад/действие · E/F = скролл
             </span>
           )}
           <ClockWidget />

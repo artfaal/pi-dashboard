@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { OpenclawData, WidgetProps } from '../types'
 
 function fmtUptime(secs: number): string {
@@ -30,23 +30,22 @@ function stateLabel(state: string, substate: string): string {
 
 type ActionState = 'idle' | 'pending' | 'ok' | 'err'
 
-function ActionButton({
-  label,
-  icon,
-  color,
-  hoverColor,
-  glowColor,
-  onAction,
-  disabled,
-}: {
-  label:       string
-  icon:        string
-  color:       string
-  hoverColor:  string
-  glowColor:   string
-  onAction:    () => Promise<void>
-  disabled:    boolean
-}) {
+interface ActionButtonHandle {
+  trigger: () => void
+}
+
+// focusIdx positions: 0=status panel, 1=Start, 2=Restart, 3=Stop
+const FOCUS_COUNT = 4
+
+const ActionButton = forwardRef<ActionButtonHandle, {
+  label:      string
+  icon:       string
+  color:      string
+  glowColor:  string
+  onAction:   () => Promise<void>
+  disabled:   boolean
+  keyFocused: boolean
+}>(function ActionButton({ label, icon, color, glowColor, onAction, disabled, keyFocused }, ref) {
   const [state, setState] = useState<ActionState>('idle')
 
   const handle = async () => {
@@ -60,6 +59,8 @@ function ActionButton({
     }
     setTimeout(() => setState('idle'), 1500)
   }
+
+  useImperativeHandle(ref, () => ({ trigger: handle }))
 
   const isPending = state === 'pending'
   const isOk      = state === 'ok'
@@ -76,12 +77,15 @@ function ActionButton({
         backgroundColor: isOk  ? `${glowColor}20`
                         : isErr ? '#ef444420'
                         : `${color}12`,
-        borderColor:     isOk  ? glowColor
+        borderColor:     keyFocused && !isOk && !isErr ? glowColor
+                        : isOk  ? glowColor
                         : isErr ? '#ef4444'
                         : `${color}40`,
-        boxShadow:       isPending ? `0 0 20px 2px ${glowColor}50`
-                        : isOk    ? `0 0 16px 2px ${glowColor}60`
-                        : isErr   ? '0 0 16px 2px #ef444460'
+        boxShadow:       keyFocused && !isPending && !isOk && !isErr
+                          ? `0 0 20px 4px ${glowColor}50`
+                        : isPending ? `0 0 20px 2px ${glowColor}50`
+                        : isOk     ? `0 0 16px 2px ${glowColor}60`
+                        : isErr    ? '0 0 16px 2px #ef444460'
                         : 'none',
       }}
     >
@@ -96,7 +100,7 @@ function ActionButton({
       </span>
     </button>
   )
-}
+})
 
 async function callAction(action: 'start' | 'stop' | 'restart') {
   const r = await fetch(`/api/openclaw/${action}`, { method: 'POST' })
@@ -106,11 +110,52 @@ async function callAction(action: 'start' | 'stop' | 'restart') {
   }
 }
 
-export function ClawDetailWidget({ data, error }: WidgetProps) {
+export function ClawDetailWidget({ data, error, keyActionRef }: WidgetProps) {
   const prevRef = useRef<OpenclawData | null>(null)
   const od = data as OpenclawData | null
   if (od) prevRef.current = od
   const d = od ?? prevRef.current
+
+  // Focus: 0=status panel, 1=Start, 2=Restart, 3=Stop
+  const [focusIdx, setFocusIdx]   = useState(0)
+  const focusIdxRef               = useRef(0)
+
+  const startRef   = useRef<ActionButtonHandle>(null)
+  const restartRef = useRef<ActionButtonHandle>(null)
+  const stopRef    = useRef<ActionButtonHandle>(null)
+
+  // Register key handler with App
+  useEffect(() => {
+    if (!keyActionRef) return
+    keyActionRef.current = (code: string): boolean => {
+      const cur = focusIdxRef.current
+
+      if (code === 'KeyA') {
+        const next = (cur - 1 + FOCUS_COUNT) % FOCUS_COUNT
+        focusIdxRef.current = next
+        setFocusIdx(next)
+        return true
+      }
+
+      if (code === 'KeyC') {
+        const next = (cur + 1) % FOCUS_COUNT
+        focusIdxRef.current = next
+        setFocusIdx(next)
+        return true
+      }
+
+      if (code === 'KeyD') {
+        if (cur === 0) return false           // status panel → let App exit expanded
+        if (cur === 1) startRef.current?.trigger()
+        if (cur === 2) restartRef.current?.trigger()
+        if (cur === 3) stopRef.current?.trigger()
+        return true
+      }
+
+      return false
+    }
+    return () => { keyActionRef.current = null }
+  }, [keyActionRef])
 
   if (!d) {
     return (
@@ -120,17 +165,23 @@ export function ClawDetailWidget({ data, error }: WidgetProps) {
     )
   }
 
-  const color = stateColor(d.state)
-  const label = stateLabel(d.state, d.substate)
+  const color    = stateColor(d.state)
+  const label    = stateLabel(d.state, d.substate)
   const isActive = d.active
+  const statusFocused = focusIdx === 0
 
   return (
     <div className="flex flex-col gap-6 animate-fadeIn">
 
       {/* ── Статус ────────────────────────────────────────────────────── */}
       <div
-        className="flex items-center gap-4 rounded-2xl p-4"
-        style={{ backgroundColor: `${color}0d`, borderColor: `${color}25`, border: '1px solid' }}
+        className="flex items-center gap-4 rounded-2xl p-4 transition-all duration-200"
+        style={{
+          backgroundColor: `${color}0d`,
+          border: '1px solid',
+          borderColor:  statusFocused ? color : `${color}25`,
+          boxShadow:    statusFocused ? `0 0 16px 4px ${color}25` : 'none',
+        }}
       >
         {/* большой индикатор */}
         <div
@@ -164,6 +215,13 @@ export function ClawDetailWidget({ data, error }: WidgetProps) {
             </div>
           )}
         </div>
+
+        {/* подсказка по фокусу */}
+        {statusFocused && (
+          <div className="ml-auto text-[9px] text-slate-600 font-mono shrink-0">
+            ← A / C →
+          </div>
+        )}
       </div>
 
       {/* ── Кнопки управления ─────────────────────────────────────────── */}
@@ -173,30 +231,33 @@ export function ClawDetailWidget({ data, error }: WidgetProps) {
         </div>
         <div className="flex gap-3">
           <ActionButton
+            ref={startRef}
             label="Start"
             icon="▶"
             color="#22c55e"
-            hoverColor="#4ade80"
             glowColor="#22c55e"
             disabled={isActive}
+            keyFocused={focusIdx === 1}
             onAction={() => callAction('start')}
           />
           <ActionButton
+            ref={restartRef}
             label="Restart"
             icon="↺"
             color="#f59e0b"
-            hoverColor="#fbbf24"
             glowColor="#f59e0b"
             disabled={false}
+            keyFocused={focusIdx === 2}
             onAction={() => callAction('restart')}
           />
           <ActionButton
+            ref={stopRef}
             label="Stop"
             icon="■"
             color="#ef4444"
-            hoverColor="#f87171"
             glowColor="#ef4444"
             disabled={!isActive}
+            keyFocused={focusIdx === 3}
             onAction={() => callAction('stop')}
           />
         </div>
