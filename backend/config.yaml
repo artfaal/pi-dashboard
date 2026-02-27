@@ -66,6 +66,23 @@ modules:
       ssh_host:          "${TORRENT_SSH_HOST}"
       ssh_user:          "${TORRENT_SSH_USER}"
 
+  # ── OpenClaw Gateway service (openclaw.local) ──────────────────────────
+  - id: openclaw
+    enabled: true
+    interval: ${OPENCLAW_INTERVAL}
+    config:
+      host: "${OPENCLAW_HOST}"
+      user: "${OPENCLAW_USER}"
+
+  # ── Plex Media Server ──────────────────────────────────────────────────
+  - id: plex
+    enabled: true
+    interval: ${PLEX_INTERVAL}
+    config:
+      host: "${PLEX_HOST}"
+      token: "${PLEX_TOKEN}"
+      recent_limit: 12
+
   # ── Proxy / VPN health checks ───────────────────────────────────────────
   - id: proxy
     enabled: true

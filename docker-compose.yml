@@ -13,6 +13,8 @@ services:
     restart: unless-stopped
     env_file: .env
     pid: "host"          # allows pkill to reach host processes (kiosk exit)
+    volumes:
+      - image-cache:/cache
     networks:
       - dashboard-net
       - dadjet_co2_co2net   # access co2mond metrics at http://co2mond:9999/metrics
@@ -56,6 +58,9 @@ services:
       options:
         max-size: "5m"
         max-file: "3"
+
+volumes:
+  image-cache:
 
 networks:
   dashboard-net:

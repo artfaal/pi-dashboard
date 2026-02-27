@@ -23,6 +23,10 @@ import { WeatherDetailWidget } from './WeatherDetailWidget'
 import { TempRoomWidget } from './TempRoomWidget'
 import { TorrentWidget } from './TorrentWidget'
 import { TorrentDetailWidget } from './TorrentDetailWidget'
+import { PlexWidget } from './PlexWidget'
+import { PlexDetailWidget } from './PlexDetailWidget'
+import { ClawWidget } from './ClawWidget'
+import { ClawDetailWidget } from './ClawDetailWidget'
 
 export const WIDGET_REGISTRY: Record<string, ComponentType<WidgetProps>> = {
   co2:             CO2Widget,
@@ -38,4 +42,8 @@ export const WIDGET_REGISTRY: Record<string, ComponentType<WidgetProps>> = {
   temp_room:       TempRoomWidget,
   torrent:         TorrentWidget,
   torrent_detail:  TorrentDetailWidget,
+  plex:            PlexWidget,
+  plex_detail:     PlexDetailWidget,
+  claw:            ClawWidget,
+  claw_detail:     ClawDetailWidget,
 }

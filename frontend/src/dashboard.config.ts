@@ -37,6 +37,20 @@ export const DASHBOARD_CONFIG = {
       ],
     },
     {
+      id: 'plex',
+      label: 'Plex',
+      slots: [
+        { widgetId: 'plex', moduleId: 'plex', detailWidgetId: 'plex_detail' },
+      ],
+    },
+    {
+      id: 'claw',
+      label: 'Клоя',
+      slots: [
+        { widgetId: 'claw', moduleId: 'openclaw', detailWidgetId: 'claw_detail' },
+      ],
+    },
+    {
       id: 'plants',
       label: 'Растения',
       slots: [

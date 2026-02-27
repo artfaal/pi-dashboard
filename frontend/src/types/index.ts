@@ -114,6 +114,45 @@ export interface TorrentData {
   disks: DiskInfo[]
 }
 
+export interface OpenclawData {
+  active:       boolean
+  state:        'active' | 'inactive' | 'failed' | 'activating' | string
+  substate:     string
+  uptime_secs:  number | null
+  pid:          number | null
+  cpu_mins:     number
+  version:      string | null
+}
+
+export interface PlexSession {
+  title: string
+  type: 'movie' | 'episode'
+  show?: string
+  season?: number
+  episode?: number
+  progress_pct: number
+  thumb: string | null
+  player: string
+  duration_ms: number
+  view_offset_ms: number
+}
+
+export interface PlexMediaItem {
+  title: string
+  year?: number | null
+  rating?: number | null
+  genres?: string[]
+  thumb: string | null
+  added_at: number
+  season?: number | null
+}
+
+export interface PlexData {
+  now_playing: PlexSession[]
+  recent_movies: PlexMediaItem[]
+  recent_shows: PlexMediaItem[]
+}
+
 // Standard props interface for all widgets
 export interface WidgetProps {
   data: unknown
