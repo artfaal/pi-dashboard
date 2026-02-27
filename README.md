@@ -102,6 +102,8 @@ pi-dashboard/
 │       ├── proxy.py            # Проверка прокси: SOCKS5/HTTP/HTTPS/SS/Trojan
 │       ├── router.py           # Статистика роутера (OpenWrt SSH)
 │       ├── torrent.py          # Transmission RPC + disk space via SSH
+│       ├── plex.py             # Plex Media Server HTTP API
+│       ├── openclaw.py         # openclaw-gateway статус (systemctl --user via SSH)
 │       └── weather.py          # Погода (Open-Meteo API)
 │
 ├── frontend/
@@ -130,7 +132,11 @@ pi-dashboard/
 │           ├── WeatherDetailWidget.tsx
 │           ├── TempRoomWidget.tsx
 │           ├── TorrentWidget.tsx
-│           └── TorrentDetailWidget.tsx
+│           ├── TorrentDetailWidget.tsx
+│           ├── PlexWidget.tsx
+│           ├── PlexDetailWidget.tsx
+│           ├── ClawWidget.tsx
+│           └── ClawDetailWidget.tsx
 │
 └── start-kiosk.sh              # Запуск Chromium kiosk (ждёт :3000)
 ```
@@ -177,8 +183,14 @@ pi-dashboard/
 | `router` | `router.py` | SSH → OpenWrt (192.168.2.1) | `wan_ip`, `uptime_secs`, `dhcp_clients`, `wan_rx_bps`, `wan_tx_bps` |
 | `proxy` | `proxy.py` | HTTP/SOCKS/TLS тесты с Pi | `ok`, `proxies[]` (name, type, ok, ms, exit_ip, exit_isp, error) — SOCKS5, HTTP, HTTPS, SS (TCP), Trojan (TLS) |
 | `torrent` | `torrent.py` | Transmission RPC + SSH → медиа-сервер | `downloading` (активный торрент или null), `recent[]` (до 10, по дате), `speed` (download_bps, upload_bps), `disks[]` (name, mount, total_gb, free_gb, used_pct) |
+| `plex` | `plex.py` | Plex HTTP API (`http://{PLEX_HOST}:32400`) | `now_playing[]` (сессии воспроизведения), `recent_movies[]` (до 12), `recent_shows[]` (до 12, дедуп по шоу) |
+| `openclaw` | `openclaw.py` | SSH → `192.168.2.187`, `systemctl --user` | `active`, `state`, `substate`, `uptime_secs`, `pid`, `cpu_mins`, `version` |
 
-**Картинки растений** (`/api/plants/image/{name}`) проксируются бэкендом через SOCKS5 и кэшируются на диск в `/tmp/plant_images/` внутри контейнера. При повторных запросах отдаются с диска без обращения к `img.artfaal.ru`. Кэш сбрасывается только при пересоздании контейнера.
+**Дополнительные API endpoints:**
+- `GET /api/plex/thumb?path=...&w=...&h=...` — прокси постеров Plex с кэшем в Docker-volume `/cache/plex_thumbs/`
+- `POST /api/openclaw/{start|stop|restart}` — управление сервисом `openclaw-gateway.service` через SSH
+
+**Картинки растений** (`/api/plants/image/{name}`) и постеры Plex (`/api/plex/thumb`) кэшируются в Docker named volume `image-cache` (смонтирован в `/cache/`). Кэш сохраняется между пересозданиями контейнеров (`./manage.sh deploy`).
 
 ---
 
@@ -228,14 +240,16 @@ export const DASHBOARD_CONFIG = {
 
 | Физическая кнопка | Посылает | `e.code` | Режим страницы | Режим детального вида |
 |-------------------|----------|----------|---------------|----------------------|
-| Button A          | `a`      | `KeyA`   | Выбрать виджет левее (циклично) | — |
+| Button A          | `a`      | `KeyA`   | Выбрать виджет левее (циклично) | Фокус влево (если виджет поддерживает) |
 | Button B          | `b`      | `KeyB`   | Войти в виджет | Выйти назад |
-| Button C          | `c`      | `KeyC`   | Выбрать виджет правее (циклично) | — |
-| Knob нажатие      | `d`      | `KeyD`   | Выйти из kiosk | Выйти назад |
+| Button C          | `c`      | `KeyC`   | Выбрать виджет правее (циклично) | Фокус вправо (если виджет поддерживает) |
+| Knob нажатие      | `d`      | `KeyD`   | Выйти из kiosk | Выполнить действие / Выйти назад |
 | Knob влево        | `e`      | `KeyE`   | Предыдущая страница | Прокрутить вверх |
 | Knob вправо       | `f`      | `KeyF`   | Следующая страница | Прокрутить вниз |
 
 > Используется `e.code` (физическая позиция клавиши), а не `e.key` — язык раскладки на Pi не влияет.
+>
+> Поведение A/C/D в детальном виде зависит от виджета. Виджет может зарегистрировать собственный обработчик через `keyActionRef` — тогда App делегирует ему управление клавишами.
 
 ### Выбор и раскрытие виджетов
 
@@ -253,6 +267,43 @@ export const DASHBOARD_CONFIG = {
                                  └─────────────────────────────┘
                                        E/F = скролл · D = назад
 ```
+
+### Навигация по кнопкам в детальном виджете Клои
+
+`ClawDetailWidget` реализует собственную клавишную навигацию между элементами интерфейса.
+
+**Фокус-позиции** (циклический порядок):
+
+| Позиция | Элемент |
+|---------|---------|
+| `0` | Панель статуса (по умолчанию при входе) |
+| `1` | Кнопка **Start** (зелёная) |
+| `2` | Кнопка **Restart** (янтарная) |
+| `3` | Кнопка **Stop** (красная) |
+
+**Управление:**
+- **A** — фокус на позицию влево (циклично: 0 → 3 → 2 → 1 → 0)
+- **C** — фокус на позицию вправо (циклично: 0 → 1 → 2 → 3 → 0)
+- **D** на панели статуса → выход в главное пространство
+- **D** на кнопке (1/2/3) → выполнить действие (Start / Restart / Stop)
+
+Активный элемент подсвечивается свечением; на панели статуса появляется подсказка `← A / C →`.
+
+```
+[Клоя — детальный вид]
+┌─────────────────────────────────────────┐
+│  ● Работает  v2026.2.25  ↑ 44 мин  [A/C→]  ◄── фокус 0 (D = выйти)
+│
+│  ┌──────┐  ┌──────────┐  ┌──────┐
+│  │  ▶   │  │    ↺     │  │  ■   │
+│  │Start │  │ Restart  │  │ Stop │
+│  └──────┘  └══════════┘  └──────┘
+│                ▲
+│           фокус 2 (D = restart)
+└─────────────────────────────────────────┘
+```
+
+> Кнопки Start/Stop автоматически блокируются (`disabled`) в зависимости от текущего состояния сервиса — нажатие D на заблокированной кнопке не производит действия.
 
 ### Как добавить детальный вид для виджета
 
@@ -285,9 +336,14 @@ export const DASHBOARD_CONFIG = {
 | `temp_room` | `TempRoomWidget` | `co2` | Температура в помещении, comfort range |
 | `torrent` | `TorrentWidget` | `torrent` | Активная загрузка (если есть) с прогресс-баром, список последних 10 торрентов, свободное место на 3 дисках |
 | `torrent_detail` | `TorrentDetailWidget` | `torrent` | Крупная карточка активной загрузки (скорость, ETA, пиры), полный список с прогресс-барами, детальные диски с цветовой кодировкой |
+| `plex` | `PlexWidget` | `plex` | 4 постера в ряд: 2 последних фильма + 2 последних сериала |
+| `plex_detail` | `PlexDetailWidget` | `plex` | Сетки 5×N: последние 10 фильмов и 10 сериалов с постерами, названиями, годом/сезоном; скролл энкодером |
+| `claw` | `ClawWidget` | `openclaw` | Светящийся индикатор состояния сервиса openclaw-gateway (активен/остановлен/ошибка), аптайм, PID |
+| `claw_detail` | `ClawDetailWidget` | `openclaw` | Детальный статус + кнопки Start / Restart / Stop; навигация по кнопкам через A/C/D |
 | *(header)* | `ClockWidget` | *(local)* | Часы HH:MM:SS + дата |
 
 Все виджеты принимают `{ data: unknown; error?: string }` — интерфейс `WidgetProps`.
+Виджеты с собственной клавишной навигацией дополнительно получают `keyActionRef` — регистрируют обработчик и возвращают `true` при потреблении клавиши.
 
 ---
 
@@ -375,6 +431,17 @@ PLANTS_PROXY_HOST=              # SOCKS5 прокси (опционально)
 PLANTS_PROXY_PORT=1080
 PLANTS_PROXY_USER=
 PLANTS_PROXY_PASSWORD=
+
+# ── Plex Media Server ──────────────────────────────────────────────────────────
+PLEX_HOST=192.168.2.169         # IP сервера с Plex (порт 32400 должен быть доступен с Pi)
+PLEX_TOKEN=<token>              # X-Plex-Token (см. com.plexapp.plexmediaserver.plist)
+PLEX_INTERVAL=120
+
+# ── Клоя / openclaw-gateway (systemd user unit) ───────────────────────────────
+OPENCLAW_HOST=192.168.2.187     # IP хоста с openclaw-gateway
+OPENCLAW_USER=claw              # SSH-пользователь (uid=1000, XDG_RUNTIME_DIR=/run/user/1000)
+OPENCLAW_INTERVAL=15
+OPENCLAW_SSH_KEY_B64=<base64>   # base64 ~/.ssh/id_ed25519 (тот же ключ, что добавлен на хост)
 ```
 
 ### Настройка SSH-ключа (роутер + медиа-сервер)
