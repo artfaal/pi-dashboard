@@ -39,7 +39,6 @@
 │  │   │    internet.py      │   │  /api/    → :8000 │  │  │
 │  │   │    plants.py        │   └────────────────────┘  │  │
 │  │   │    router.py        │                            │  │
-│  │   │    proxy.py         │                            │  │
 │  │   │    torrent.py       │                            │  │
 │  │   │    weather.py       │                            │  │
 │  │   │                     │                            │  │
@@ -62,7 +61,7 @@
 **Поток данных:**
 
 ```
-Внешние источники (co2mond, Open-Meteo, URLs, SSH, прокси)
+Внешние источники (co2mond, Open-Meteo, URLs, SSH)
         │
         ▼
   Модули backend (collect() каждые N сек)
@@ -99,7 +98,6 @@ pi-dashboard/
 │       ├── co2.py              # CO2 + температура (co2mond Prometheus)
 │       ├── internet.py         # Пинг HTTP-таргетов + DNS resolve
 │       ├── plants.py           # Датчики влажности растений (Pushgateway)
-│       ├── proxy.py            # Проверка прокси: SOCKS5/HTTP/HTTPS/SS/Trojan
 │       ├── router.py           # Статистика роутера (OpenWrt SSH)
 │       ├── torrent.py          # Transmission RPC + disk space via SSH
 │       ├── plex.py             # Plex Media Server HTTP API
@@ -125,8 +123,6 @@ pi-dashboard/
 │           ├── InternetDetailWidget.tsx
 │           ├── PlantsWidget.tsx
 │           ├── PlantsDetailWidget.tsx
-│           ├── ProxyWidget.tsx
-│           ├── ProxyDetailWidget.tsx
 │           ├── RouterWidget.tsx
 │           ├── WeatherWidget.tsx
 │           ├── WeatherDetailWidget.tsx
@@ -149,7 +145,7 @@ pi-dashboard/
 |------|-----|-------|
 | **Backend** | Python + FastAPI | Async, WebSocket из коробки |
 | **Transport** | WebSocket | Сервер пушит данные — нет polling |
-| **HTTP-клиент** | httpx + socksio | Async HTTP, поддержка SOCKS5/HTTP прокси |
+| **HTTP-клиент** | httpx | Async HTTP |
 | **SSH-клиент** | asyncssh | Async SSH к роутеру (OpenWrt) и медиа-серверу (диски) |
 | **Torrent-клиент** | transmission-rpc | Синхронный RPC-клиент Transmission (запускается в executor) |
 | **Frontend** | React + Vite + TypeScript | Компонент = виджет |
@@ -181,7 +177,6 @@ pi-dashboard/
 | `plants` | `plants.py` | Pushgateway `/api/v1/metrics` | `plants[]` (name, humidity, humidity_min, humidity_max, temp, battery, image_url) |
 | `weather` | `weather.py` | Open-Meteo API | `temp`, `feels_like`, `humidity`, `wind_speed`, `wind_dir`, `wind_gusts`, `pressure` (гПа), `precipitation`, `uv_index`, `condition`, `description`, `is_day`, `temp_max`, `temp_min`, `precip_today`, `sunrise`, `sunset` |
 | `router` | `router.py` | SSH → OpenWrt (192.168.2.1) | `wan_ip`, `uptime_secs`, `dhcp_clients`, `wan_rx_bps`, `wan_tx_bps` |
-| `proxy` | `proxy.py` | HTTP/SOCKS/TLS тесты с Pi | `ok`, `proxies[]` (name, type, ok, ms, exit_ip, exit_isp, error) — SOCKS5, HTTP, HTTPS, SS (TCP), Trojan (TLS) |
 | `torrent` | `torrent.py` | Transmission RPC + SSH → медиа-сервер | `downloading` (активный торрент или null), `recent[]` (до 10, по дате), `speed` (download_bps, upload_bps), `disks[]` (name, mount, total_gb, free_gb, used_pct) |
 | `plex` | `plex.py` | Plex HTTP API (`http://{PLEX_HOST}:32400`) | `now_playing[]` (сессии воспроизведения), `recent_movies[]` (до 12), `recent_shows[]` (до 12, дедуп по шоу) |
 | `openclaw` | `openclaw.py` | SSH → `192.168.2.187`, `systemctl --user` | `active`, `state`, `substate`, `uptime_secs`, `pid`, `cpu_mins`, `version` |
@@ -210,7 +205,6 @@ export const DASHBOARD_CONFIG = {
     ]},
     { id: 'network', label: 'Сеть', slots: [
       { widgetId: 'router', moduleId: 'router' },
-      { widgetId: 'proxy',  moduleId: 'proxy',  detailWidgetId: 'proxy_detail' },
     ]},
     { id: 'media', label: 'Медиа', slots: [
       { widgetId: 'torrent', moduleId: 'torrent', detailWidgetId: 'torrent_detail' },
@@ -255,17 +249,17 @@ export const DASHBOARD_CONFIG = {
 
 Виджеты на странице можно выбирать клавишами A/C — выбранный подсвечивается indigo-рамкой. Нажатие B (или тап по виджету) разворачивает его на весь экран, показывая детальный вид (`detailWidgetId`). Выйти — клавишей B или D, а также тапом по экрану.
 
-В развёрнутом виджете **энкодер прокручивает содержимое** (↑/↓ на высоту видимой области). Это полезно когда контент не вмещается на экран — списки прокси, страницы растений.
+В развёрнутом виджете **энкодер прокручивает содержимое** (↑/↓ на высоту видимой области). Это полезно когда контент не вмещается на экран — страницы растений, список торрентов.
 
 ```
-[Главная страница]               [Детальный вид — proxy_detail]
-┌──────┬──────┬──────┐           ┌─────────────────────────────┐
-│Router│[Prox]│      │  ──B──►  │   Proxy / VPN · подробно    │  ▲
-│      │[====]│      │           │   ● SOCKS5    ...    300ms  │  │ Knob↑
-└──────┴──────┴──────┘           │   ● HTTP      ...           │  │
-   A ◄──── выбор ────► C         │   ● Trojan    ...           │  ▼ Knob↓
-                                 └─────────────────────────────┘
-                                       E/F = скролл · D = назад
+[Страница Сеть]                  [Детальный вид — weather_detail]
+┌──────────────────┐              ┌─────────────────────────────┐
+│    [Router]      │  ──B──►      │   Погода · подробно         │  ▲
+│    [======]      │              │   Ветер  ...                │  │ Knob↑
+└──────────────────┘              │   Давление ...              │  │
+   A ◄──── выбор ────► C          │   УФ-индекс ...             │  ▼ Knob↓
+                                  └─────────────────────────────┘
+                                        E/F = скролл · D = назад
 ```
 
 ### Навигация по кнопкам в детальном виджете Клои
@@ -328,8 +322,6 @@ export const DASHBOARD_CONFIG = {
 | `internet_detail` | `InternetDetailWidget` | `internet` | Все цели с барами, DNS резолв, статистика |
 | `plants` | `PlantsWidget` | `plants` | Компактная сетка 5×N: все растения сразу — фото + цветной процент влажности |
 | `plants_detail` | `PlantsDetailWidget` | `plants` | Детальные карточки по 3 на экране: фото, бар влажности, температура; энкодер E/F листает постранично |
-| `proxy` | `ProxyWidget` | `proxy` | Цветные точки по 5 прокси (SOCKS5, HTTP, HTTPS, SS, Trojan) с latency |
-| `proxy_detail` | `ProxyDetailWidget` | `proxy` | Карточки: протокол, latency, exit IP + ISP (или ошибка); скролл энкодером |
 | `router` | `RouterWidget` | `router` | WAN IP, аптайм, кол-во DHCP-клиентов, скорость WAN ↓/↑ |
 | `weather` | `WeatherWidget` | `weather` | Температура, ощущается, влажность, ветер, диапазон дня |
 | `weather_detail` | `WeatherDetailWidget` | `weather` | Ветер+порывы, давление, УФ-индекс, осадки, восход/закат, бар диапазона |
@@ -404,12 +396,6 @@ ROUTER_USER=root
 ROUTER_INTERVAL=60
 ROUTER_SSH_KEY_B64=<base64-encoded-private-key>  # см. раздел ниже
 
-# ── Proxy / VPN health checks ─────────────────────────────────────────────────
-PROXY_VEGA_HOST=vega.example.com
-PROXY_VEGA_USER=user
-PROXY_VEGA_PASS=<password>
-PROXY_INTERVAL=120
-
 # ── Torrent (Transmission RPC + disk space via SSH) ──────────────────────────
 TORRENT_HOST=192.168.2.169          # IP медиа-сервера (Transmission)
 TORRENT_PORT=9091
@@ -427,10 +413,6 @@ PLANTS_PUSHGATEWAY_URL=https://pushgateway.example.com
 PLANTS_INTERVAL=300
 PLANTS_IMAGE_BASE_URL=https://img.example.com/plants
 PLANTS_IMAGE_TIMEOUT=10
-PLANTS_PROXY_HOST=              # SOCKS5 прокси (опционально)
-PLANTS_PROXY_PORT=1080
-PLANTS_PROXY_USER=
-PLANTS_PROXY_PASSWORD=
 
 # ── Plex Media Server ──────────────────────────────────────────────────────────
 PLEX_HOST=192.168.2.169         # IP сервера с Plex (порт 32400 должен быть доступен с Pi)
