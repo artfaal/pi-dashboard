@@ -58,6 +58,14 @@ function diskColor(freeGb: number): string {
   return '#64748b'
 }
 
+const FORBIDDEN_DISK_TOKEN = 'stuff'
+
+// Hide disks whose label/mount contains the forbidden word.
+function shouldHideDisk(disk: DiskInfo): boolean {
+  const normalizedLabel = `${disk.name} ${disk.mount}`.toLowerCase()
+  return normalizedLabel.includes(FORBIDDEN_DISK_TOKEN)
+}
+
 // ── Active download (big card) ───────────────────────────────────────────────
 
 function ActiveCard({ t, dlSpeed, ulSpeed }: { t: TorrentItem; dlSpeed: number; ulSpeed: number }) {
@@ -177,6 +185,7 @@ export function TorrentDetailWidget({ data, error }: WidgetProps) {
     const order = { downloading: 0, checking: 1, seeding: 2, paused: 3, error: 4, unknown: 5 }
     return (order[a.status] ?? 5) - (order[b.status] ?? 5)
   })
+  const disks = d.disks.filter(disk => !shouldHideDisk(disk))
 
   return (
     <div className="flex flex-col gap-4 animate-fadeIn">
@@ -209,12 +218,12 @@ export function TorrentDetailWidget({ data, error }: WidgetProps) {
       </div>
 
       {/* Disk space */}
-      {d.disks.length > 0 && (
+      {disks.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="text-[10px] font-semibold tracking-[0.15em] text-slate-500 uppercase">
             Место на диске
           </div>
-          {d.disks.map(disk => <DiskCard key={disk.name} d={disk} />)}
+          {disks.map(disk => <DiskCard key={disk.name} d={disk} />)}
         </div>
       )}
 

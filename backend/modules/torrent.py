@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 # Диски на southnet.local: (название в UI, mount point)
 _DISK_MOUNTS = [
     ("Main",  "/"),
-    ("NVME",  "/Volumes/stuff"),
     ("HDD",   "/Volumes/COLD"),
 ]
 

@@ -42,6 +42,14 @@ function diskColor(freeGb: number): string {
   return '#64748b'                    // slate
 }
 
+const FORBIDDEN_DISK_TOKEN = 'stuff'
+
+// Hide disks whose label/mount contains the forbidden word.
+function shouldHideDisk(disk: DiskInfo): boolean {
+  const normalizedLabel = `${disk.name} ${disk.mount}`.toLowerCase()
+  return normalizedLabel.includes(FORBIDDEN_DISK_TOKEN)
+}
+
 // ── sub-components ───────────────────────────────────────────────────────────
 
 function ActiveDownload({ t }: { t: TorrentItem }) {
@@ -130,6 +138,7 @@ export function TorrentWidget({ data, error }: WidgetProps) {
   }
 
   const others = d.recent.filter(t => t.status !== 'downloading').slice(0, 4)
+  const disks = d.disks.filter(disk => !shouldHideDisk(disk))
 
   return (
     <div className="flex flex-col gap-2 h-full animate-fadeIn">
@@ -157,9 +166,9 @@ export function TorrentWidget({ data, error }: WidgetProps) {
       )}
 
       {/* disk space */}
-      {d.disks.length > 0 && (
+      {disks.length > 0 && (
         <div className="flex flex-col gap-1 border-t border-white/[0.05] pt-2">
-          {d.disks.map(disk => <DiskRow key={disk.name} d={disk} />)}
+          {disks.map(disk => <DiskRow key={disk.name} d={disk} />)}
         </div>
       )}
     </div>
