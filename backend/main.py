@@ -19,7 +19,6 @@ from modules.internet import InternetModule
 from modules.openclaw import OpenclawModule
 from modules.plants import PlantsModule
 from modules.plex import PlexModule
-from modules.proxy import ProxyModule
 from modules.router import RouterModule
 from modules.torrent import TorrentModule
 from modules.weather import WeatherModule
@@ -41,7 +40,6 @@ MODULE_REGISTRY = {
     "openclaw":  OpenclawModule,
     "plants":    PlantsModule,
     "plex":      PlexModule,
-    "proxy":     ProxyModule,
     "router":    RouterModule,
     "torrent":   TorrentModule,
     "weather":   WeatherModule,
@@ -264,18 +262,16 @@ _IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.get("/api/plants/image/{name}")
 async def plants_image(name: str):
-    """Proxy plant images through SOCKS5 with disk cache inside the container."""
+    """Proxy plant images with disk cache inside the container."""
     safe_name = urllib.parse.quote(name, safe="")
     cache_file = _IMAGE_CACHE_DIR / f"{safe_name}.png"
 
     if cache_file.exists():
         return Response(content=cache_file.read_bytes(), media_type="image/png")
 
-    module = module_instances.get("plants")
-    proxy = module.proxy if module else None
     url = f"{_IMAGE_BASE_URL}/{urllib.parse.quote(name)}.png"
     try:
-        async with httpx.AsyncClient(timeout=_IMAGE_TIMEOUT, proxy=proxy) as client:
+        async with httpx.AsyncClient(timeout=_IMAGE_TIMEOUT) as client:
             r = await client.get(url)
             r.raise_for_status()
     except Exception as exc:

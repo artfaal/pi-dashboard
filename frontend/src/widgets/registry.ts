@@ -15,8 +15,6 @@ import { InternetWidget } from './InternetWidget'
 import { InternetDetailWidget } from './InternetDetailWidget'
 import { PlantsWidget } from './PlantsWidget'
 import { PlantsDetailWidget } from './PlantsDetailWidget'
-import { ProxyWidget } from './ProxyWidget'
-import { ProxyDetailWidget } from './ProxyDetailWidget'
 import { RouterWidget } from './RouterWidget'
 import { WeatherWidget } from './WeatherWidget'
 import { WeatherDetailWidget } from './WeatherDetailWidget'
@@ -34,8 +32,6 @@ export const WIDGET_REGISTRY: Record<string, ComponentType<WidgetProps>> = {
   internet_detail: InternetDetailWidget,
   plants:          PlantsWidget,
   plants_detail:   PlantsDetailWidget,
-  proxy:           ProxyWidget,
-  proxy_detail:    ProxyDetailWidget,
   router:          RouterWidget,
   weather:         WeatherWidget,
   weather_detail:  WeatherDetailWidget,

@@ -26,7 +26,6 @@ export const DASHBOARD_CONFIG = {
       label: 'Сеть',
       slots: [
         { widgetId: 'router', moduleId: 'router' },
-        { widgetId: 'proxy',  moduleId: 'proxy',  detailWidgetId: 'proxy_detail' },
       ],
     },
     {

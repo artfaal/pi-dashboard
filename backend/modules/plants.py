@@ -14,20 +14,11 @@ class PlantsModule(BaseModule):
     def __init__(
         self,
         pushgateway_url: str = "https://pushgateway.artfaal.ru",
-        proxy_host: str = "",
-        proxy_port: int = 1080,
-        proxy_user: str = "",
-        proxy_password: str = "",
     ) -> None:
         self.pushgateway_url = pushgateway_url.rstrip("/")
-        if proxy_host:
-            creds = f"{proxy_user}:{proxy_password}@" if proxy_user else ""
-            self.proxy = f"socks5://{creds}{proxy_host}:{proxy_port}"
-        else:
-            self.proxy = None
 
     async def collect(self) -> dict:
-        async with httpx.AsyncClient(timeout=15, proxy=self.proxy) as client:
+        async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(f"{self.pushgateway_url}/api/v1/metrics")
             r.raise_for_status()
         data = r.json()

@@ -30,10 +30,6 @@ modules:
     interval: ${PLANTS_INTERVAL}
     config:
       pushgateway_url: "${PLANTS_PUSHGATEWAY_URL}"
-      proxy_host: "${PLANTS_PROXY_HOST}"
-      proxy_port: ${PLANTS_PROXY_PORT}
-      proxy_user: "${PLANTS_PROXY_USER}"
-      proxy_password: "${PLANTS_PROXY_PASSWORD}"
 
   # ── Weather via Open-Meteo (free, no API key) ──────────────────────────
   - id: weather
@@ -83,11 +79,3 @@ modules:
       token: "${PLEX_TOKEN}"
       recent_limit: 12
 
-  # ── Proxy / VPN health checks ───────────────────────────────────────────
-  - id: proxy
-    enabled: true
-    interval: ${PROXY_INTERVAL}
-    config:
-      vega_host: "${PROXY_VEGA_HOST}"
-      vega_user: "${PROXY_VEGA_USER}"
-      vega_pass: "${PROXY_VEGA_PASS}"
